@@ -181,7 +181,7 @@ function mergeHistory(remote: SimulationRun[], local: SimulationRun[]): Simulati
     byId.set(run.id, run);
   }
 
-  return [...byId.values()]
+  return Array.from(byId.values())
     .sort(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
