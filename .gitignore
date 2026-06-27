@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
@@ -25,7 +23,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
+# env — never commit secrets
+.env
 .env*.local
 
 # vercel
@@ -33,4 +32,16 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+
+# cesium assets copied at build (see scripts/copy-cesium.js)
+/public/cesium/
+
+# python simulation backend
+simulation/.venv/
+simulation/__pycache__/
+*.py[cod]
+
+# IDE
+.idea/
+.vscode/
+*.swp

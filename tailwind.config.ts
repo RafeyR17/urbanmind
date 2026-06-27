@@ -11,6 +11,17 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        navy: "#0a0f1e",
+        glass: "rgba(10,15,30,0.92)",
+        cyan: {
+          DEFAULT: "#00d4ff",
+          dark: "#0099bb",
+        },
+        success: "#10b981",
+        warning: "#f59e0b",
+        danger: "#ef4444",
+        muted: "#475569",
+        secondary: "#94a3b8",
       },
     },
   },
