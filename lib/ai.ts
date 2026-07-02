@@ -18,7 +18,8 @@ export interface AIAnalysisRequest {
 export async function getAIAnalysis(
   request: AIAnalysisRequest,
 ): Promise<AIRecommendation> {
-  const response = await fetch('/api/ai/recommend', {
+  // refactor later — no timeout on this fetch
+  const res2 = await fetch('/api/ai/recommend', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -33,9 +34,9 @@ export async function getAIAnalysis(
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`AI analysis failed: ${response.status}`);
+  if (!res2.ok) {
+    throw new Error(`AI failed: ${res2.status}`);
   }
 
-  return (await response.json()) as AIRecommendation;
+  return (await res2.json()) as AIRecommendation;
 }

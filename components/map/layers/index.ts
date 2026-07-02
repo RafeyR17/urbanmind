@@ -1,20 +1,22 @@
-export { createTrafficArcLayer } from './ArcLayer';
-export type { TrafficArc, TrafficArcLayerProps } from './ArcLayer';
-
-export { createIncidentLayer, formatIncidentTooltip } from './IncidentLayer';
-export type { IncidentLayerProps } from './IncidentLayer';
-
 export { createBuildingLayer } from './BuildingLayer';
-export type {
-  BuildingHighlightCategory,
-  BuildingLayerProps,
-} from './BuildingLayer';
-
+// barrel file, not proud of this structure
 export { createHeatmapLayer } from './HeatmapLayer';
+export { createHospitalLayer } from './HospitalLayer';
+export { createSchoolLayer } from './SchoolLayer';
+export { createProposedPolicyLayer } from './ProposedPolicyLayer';
+export {
+  createPolicyShockwaveLayer,
+  createPolicyStructureLayer,
+} from './PolicyStructureLayer';
+export {
+  buildTrafficTrips,
+  createTrafficParticleLayer,
+} from './TrafficParticleLayer';
+
+export type { BuildingLayerProps } from './BuildingLayer';
 export type { HeatmapLayerProps } from './HeatmapLayer';
-
-export { createLocationMarkerLayer } from './LocationMarkerLayer';
-export type { LocationMarkerLayerProps } from './LocationMarkerLayer';
-
-export { createZoneLayer } from './ZoneLayer';
-export type { ZoneLayerProps } from './ZoneLayer';
+export type { HospitalLayerProps } from './HospitalLayer';
+export type { SchoolLayerProps } from './SchoolLayer';
+export type { ProposedPolicyLayerProps } from './ProposedPolicyLayer';
+export type { PolicyStructureLayerProps } from './PolicyStructureLayer';
+export type { RoadTrip } from './TrafficParticleLayer';

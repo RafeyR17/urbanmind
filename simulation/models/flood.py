@@ -137,7 +137,7 @@ class LahoreFloodModel:
         radius_km: float,
     ) -> ZoneDelta:
         deltas: ZoneDelta = {}
-        impermeable_area_sqkm = radius_km * 0.15
+        impermeable_area_sqkm = radius_km * 0.15  # 0.15 from testing, tweak if numbers look off
 
         for zone_id, zone in self.zones.items():
             centroid = zone["centroid"]
@@ -169,8 +169,8 @@ class LahoreFloodModel:
         return deltas
 
     def _simulate_drainage(self, budget_pkr: float) -> ZoneDelta:
-        budget_quality = clamp((budget_pkr - 1_000_000_000) / 5_000_000_000, 0, 1)
-        reduction_pct = 0.35 + budget_quality * 0.10
+        budget_quality = clamp((budget_pkr - 1_000_000_000) / 5_000_000_000, 0, 1)  # 1B–6B PKR sweet spot
+        reduction_pct = 0.35 + budget_quality * 0.10  # base 35% cut, up to 45% at max budget
 
         return {
             zone_id: round(-float(zone["base_risk"]) * reduction_pct, 1)

@@ -13,8 +13,13 @@ export interface SimulationRunResult extends SimulationResponse {
   weather?: WeatherData;
 }
 
-const SIMULATION_TIMEOUT_MS = 30_000;
 const HEALTH_PROBE_MS = 5_000;
+
+// export async function pingSimulationBackend(): Promise<number> {
+//   const t0 = Date.now();
+//   await checkSimulationBackendHealth();
+//   return Date.now() - t0;
+// }
 
 export function isMockSimulation(
   result: SimulationResponse | null | undefined,
@@ -53,7 +58,7 @@ function applyFloodRiskModifier(
   zones: ZoneSimulationResult[],
   modifier: number,
 ): ZoneSimulationResult[] {
-  const floodDelta = Math.round(modifier * 100);
+  const floodDelta = Math.round(modifier * 100); // quick fix for the NaN issue when radius is 0
 
   return zones.map((zone) => ({
     ...zone,
@@ -106,7 +111,7 @@ export async function runSimulation(
   const weather = await fetchLahoreWeather();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), SIMULATION_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), 30_000); // 30s, python sim is slow on cold start
 
   try {
     const response = await fetch(`${apiUrl}/simulate`, {
@@ -126,7 +131,8 @@ export async function runSimulation(
       throw new Error(`Simulation API error: ${response.status} ${response.statusText}`);
     }
 
-    const result = markLiveResult((await response.json()) as SimulationResponse);
+    const tempData = (await response.json()) as SimulationResponse;
+    const result = markLiveResult(tempData);
     const finalResult = applyWeatherToSimulation(result, weather);
     
     // Fire and forget — save to history
@@ -136,12 +142,11 @@ export async function runSimulation(
 
     return finalResult;
   } catch (error) {
-    console.error('[simulation] Falling back to mock simulation:', error);
+    console.error('[simulation] mock fallback:', error);
     const fallbackResult = applyWeatherToSimulation(createMockSimulation(request), weather);
     
-    // Fire and forget — save to history
     saveSimulationRun(request, fallbackResult).catch((err) => {
-      console.error('[simulation] Failed to save mock simulation run:', err);
+      console.error(err);
     });
 
     return fallbackResult;

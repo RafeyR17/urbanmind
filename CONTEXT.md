@@ -39,24 +39,27 @@ Fallback: https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key={
 
 ## Traffic — TomTom
 - **Flow API:** Live congestion at 8 Lahore intersections (parallel fetch)
-- **Incidents API:** Active incidents in Lahore bbox
-- **Orbis tiles:** Traffic flow raster (70% opacity) + incident raster (90% opacity)
-- **Arc layer:** 16 arcs between intersections colored by real congestion; blends with simulation impact (±30% green/red)
-- **Incident layer:** ScatterplotLayer with severity colors; severity 4 pulses
-- **Refresh:** Every 2 minutes (`TRAFFIC_REFRESH_MS = 120000`)
-- **Top bar:** Average congestion badge, incident count, last-updated time
+- **Particle system:** `TrafficParticleLayer` using Deck.gl `TripsLayer` (`@deck.gl/geo-layers`)
+- **Road geometry:** Lahore roads fetched from Overpass API via `fetchRoads()` — cached per session
+- **Particles:** Move along actual OSM road LineStrings; color by TomTom congestion (white-blue → amber → red)
+- **Simulation:** After policy run, particles in improved zones turn green; worsened zones turn red
+- **Animation:** `requestAnimationFrame` loop in `page.tsx` — trail length 120, loop 1800ms
+- **Refresh:** TomTom flow every 2 minutes (`TRAFFIC_REFRESH_MS = 120000`)
+
+## Map Layers (Deck mode)
+- **Removed:** ArcLayer, ZoneLayer, IncidentLayer, TomTom raster overlays from default view
+- **Active:** BuildingLayer (dark navy extrusions, zoom ≥ 13), HospitalLayer (red pulsing dots), SchoolLayer (blue dots), TrafficParticleLayer, HeatmapLayer (post-simulation), ProposedPolicyLayer (policy marker)
+- **Base map:** Stripped MapTiler style — pitch-black water, dark navy land, barely-visible road lines
 
 ## Current Status
 Working:
-- Full-screen dark map of Lahore with Deck.gl + MapTiler
+- Full-screen minimal dark map of Lahore with moving traffic particles on real roads
 - Split-screen Before/After Comparison mode with synchronized view
-- Live TomTom traffic flow, incidents, and optional traffic tile overlays
-- Terrain + label overlays with sidebar toggles
-- 10 district zone polygons, 3D extruded OSM buildings (hospitals, schools)
+- Live TomTom congestion drives particle colors
+- 3D extruded OSM buildings (subtle dark navy) + hospital/school dot layers
 - OpenWeather live weather in top bar (temp, AQI, PKT clock)
-- Weather map tile overlays: precipitation, wind, temperature
-- NASA GIBS fire + surface temperature tiles (dynamic date via `lib/firms.ts`)
-- Layer toggles in sidebar (map layers + terrain + labels + TomTom + weather + fires + surface-temp)
+- Weather map tile overlays: precipitation, wind
+- Layer toggles: Buildings, Hospitals, Schools, Traffic Flow, Heatmap, Precipitation, Wind
 - Glass top bar and sidebar with policy studio shell
 - AI recommendation flow via OpenRouter (`/api/ai/recommend`)
 - Overpass fetch via /api/overpass proxy → `fetchBuildingsWithType()` for typed 3D footprints
@@ -88,18 +91,22 @@ Not yet built:
   /map/DeckMap.tsx          — MapTiler + Stadia fallback + TomTom tiles + Deck.gl + OWM tiles
   /map/CesiumMap.tsx        — Cesium 3D globe + terrain + OSM buildings
   /map/layers/
-    BuildingLayer.ts        — extruded OSM footprints (hospital/school color coding)
-    ArcLayer.ts             — live TomTom congestion arcs
-    IncidentLayer.ts        — TomTom incident scatter layer
+    BuildingLayer.ts        — subtle dark navy extruded footprints (zoom ≥ 13)
+    HospitalLayer.ts        — red pulsing scatter dots
+    SchoolLayer.ts          — blue scatter dots
+    TrafficParticleLayer.ts — TripsLayer particles on Overpass roads
+    ProposedPolicyLayer.ts  — cyan pulsing policy location marker
+    HeatmapLayer.ts         — post-simulation impact heatmap
 
 /lib
   openrouter.ts             — OpenRouter chat completions client
   ai.ts                     — client helper for /api/ai/recommend
-  tomtom.ts                 — TomTom flow/incidents fetch + tile URLs
+  tomtom.ts                 — TomTom flow fetch
   weather.ts                — OpenWeather fetch, AQI helpers, OWM tile URLs
   simulation.ts             — runSimulation() with weather context
   lahoreData.ts
-  overpass.ts               — fetchBuildingsWithType() OSM building footprints
+  overpass.ts               — fetchBuildingsWithType(), fetchRoads() OSM data
+  zoneImpact.ts             — simulation zone impact scoring (particles)
   supabase.ts
 
 /simulation
@@ -185,7 +192,7 @@ cd simulation && ./run.sh   # FastAPI on http://localhost:8000
 current_policy: 'flyover'
 budget_pkr: 5000000000
 radius_km: 3
-active_layers: ['zones', 'hospitals', 'schools', 'traffic']
+active_layers: ['buildings', 'hospitals', 'schools', 'traffic']
 active_tile_layer: 'none'
 show_terrain: false
 show_labels: true

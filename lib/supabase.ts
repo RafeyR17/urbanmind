@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { LAHORE_CENTER } from '@/lib/lahoreData';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- zone sync later
+import type { DistrictZone } from '@/types';
 import type { Database, Json } from '@/types/database';
 import type {
   AIRecommendation,
@@ -14,6 +16,11 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
 const LOCAL_HISTORY_KEY = 'urbaniq_simulation_history_v1';
 const MAX_HISTORY = 10;
+
+// export async function fetchDistrictZonesFromDb(): Promise<DistrictZone[]> {
+//   const { data } = await supabase.from('district_zones').select('*');
+//   return (data ?? []) as unknown as DistrictZone[];
+// }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
@@ -150,8 +157,8 @@ function readLocalHistory(): SimulationRun[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as SimulationRun[];
     return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.warn('[supabase] Failed to read local simulation history:', error);
+  } catch (e) {
+    console.error(e);
     return [];
   }
 }

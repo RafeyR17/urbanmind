@@ -1,5 +1,8 @@
 'use client';
 
+// leftover from zone layer refactor
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import type { DistrictZone } from '@/types';
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Layer, PickingInfo } from '@deck.gl/core';
@@ -10,23 +13,22 @@ import DemoMode, { setDemoCallbacks } from '@/components/DemoMode';
 import type { SidebarTab } from '@/components/sidebar/PolicyStudio';
 import type { WeatherTileLayer } from '@/lib/weather';
 import {
+  buildTrafficTrips,
   createBuildingLayer,
   createHeatmapLayer,
-  createIncidentLayer,
-  createLocationMarkerLayer,
-  createTrafficArcLayer,
-  createZoneLayer,
-  formatIncidentTooltip,
-  type BuildingHighlightCategory,
+  createHospitalLayer,
+  createPolicyShockwaveLayer,
+  createPolicyStructureLayer,
+  createProposedPolicyLayer,
+  createSchoolLayer,
+  createTrafficParticleLayer,
 } from '@/components/map/layers';
-import { LAHORE_CENTER, LAHORE_ZONES } from '@/lib/lahoreData';
-import { fetchBuildingsWithType } from '@/lib/overpass';
+import { LAHORE_CENTER } from '@/lib/lahoreData';
+import { fetchBuildingsWithType, fetchRoads, getInitialBuildings, getInitialRoads } from '@/lib/overpass';
 import {
   fetchTrafficFlow,
-  fetchTrafficIncidents,
   TRAFFIC_REFRESH_MS,
   type TrafficFlowSegment,
-  type TrafficIncident,
 } from '@/lib/tomtom';
 import { SCENARIO_CONFIGS, loadScenario, resolveScenarioId } from '@/lib/scenarios';
 import {
@@ -51,7 +53,7 @@ const DEFAULT_APP_STATE: AppState = {
   simulation_status: 'idle',
   simulation_result: null,
   ai_recommendation: null,
-  active_layers: ['zones', 'hospitals', 'schools', 'traffic'],
+  active_layers: ['buildings', 'hospitals', 'schools'],
   active_scenario: null,
 };
 
@@ -63,12 +65,7 @@ interface BuildingTooltip {
   height: number;
 }
 
-interface IncidentTooltip {
-  x: number;
-  y: number;
-  text: string;
-}
-
+// TODO: handle case where two zones tie on impact score
 function getMostAffectedZone(zones: ZoneSimulationResult[]) {
   return zones.reduce<ZoneSimulationResult | null>((mostAffected, zone) => {
     const trafficDelta = Math.abs(
@@ -76,7 +73,7 @@ function getMostAffectedZone(zones: ZoneSimulationResult[]) {
     );
     const floodDelta = Math.abs(zone.after.flood_risk - zone.before.flood_risk);
     const emergencyDelta =
-      Math.abs(zone.after.emergency_minutes - zone.before.emergency_minutes) * 5;
+      Math.abs(zone.after.emergency_minutes - zone.before.emergency_minutes) * 5; // weight emergencies heavier
     const impact = trafficDelta + floodDelta + emergencyDelta;
 
     if (!mostAffected) return zone;
@@ -136,9 +133,9 @@ function MapLoading() {
   return (
     <div
       className="flex items-center justify-center"
-      style={{ width: '100vw', height: '100vh', background: '#0a0f1e' }}
+      style={{ width: '100vw', height: '100vh', background: '#080e1c' }}
     >
-      <p className="text-sm font-medium tracking-wide text-cyan">
+      <p className="text-sm font-medium tracking-wide text-accent-warning">
         Loading UrbanIQ...
       </p>
     </div>
@@ -168,8 +165,13 @@ const CesiumMap = dynamic(
 
 export default function HomePage() {
   const deckMapRef = useRef<DeckMapHandle | null>(null);
+  const animationRef = useRef<number>();
+  const growthAnimRef = useRef<number | null>(null);
+  const structureCameraFiredRef = useRef(false);
+  const [structureGrowth, setStructureGrowth] = useState(0);
   const [appState, setAppState] = useState<AppState>(DEFAULT_APP_STATE);
-  const [buildings, setBuildings] = useState<BuildingFeature[]>([]);
+  const [buildings, setBuildings] = useState<BuildingFeature[]>(getInitialBuildings);
+  const [roads, setRoads] = useState(getInitialRoads);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [comparisonMode, setComparisonMode] = useState(false);
   const [viewMode, setViewMode] = useState<'deck' | 'cesium'>('deck');
@@ -178,23 +180,111 @@ export default function HomePage() {
   const [buildingTooltip, setBuildingTooltip] =
     useState<BuildingTooltip | null>(null);
   const [markerPulse, setMarkerPulse] = useState(0);
+  const [hospitalPulse, setHospitalPulse] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [mapZoom, setMapZoom] = useState(13);
   const [activeTileLayer, setActiveTileLayer] =
     useState<WeatherTileLayer>('none');
-  const [showTerrain, setShowTerrain] = useState(false);
-  const [showLabels, setShowLabels] = useState(true);
-  const [showTrafficTiles, setShowTrafficTiles] = useState(true);
-  const [showIncidents, setShowIncidents] = useState(true);
   const [trafficData, setTrafficData] = useState<TrafficFlowSegment[]>([]);
-  const [incidents, setIncidents] = useState<TrafficIncident[]>([]);
   const [lastTrafficUpdate, setLastTrafficUpdate] = useState<Date | null>(null);
-  const [incidentPulse, setIncidentPulse] = useState(0);
   const [weatherWarning, setWeatherWarning] = useState<string | null>(null);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
-  const [incidentTooltip, setIncidentTooltip] =
-    useState<IncidentTooltip | null>(null);
   const [activeTab, setActiveTab] = useState<SidebarTab>('studio');
   const [demoRunning, setDemoRunning] = useState(false);
-  const [zoneScanPulse, setZoneScanPulse] = useState(0.35);
+
+  const animate = useCallback(() => {
+    setCurrentTime((t) => (t + 1) % 1800);
+    animationRef.current = requestAnimationFrame(animate);
+  }, []);
+
+  const animateStructureGrowth = useCallback(() => {
+    if (growthAnimRef.current !== null) {
+      cancelAnimationFrame(growthAnimRef.current);
+    }
+
+    setStructureGrowth(0);
+    const duration = 1100; // ms — tuned by eye, not science
+    const start = performance.now();
+
+    function tick(now: number) {
+      const elapsed = now - start;
+      const t = Math.min(1, elapsed / duration);
+      const eased = 1 - (1 - t) ** 3;
+      setStructureGrowth(eased);
+      if (t < 1) {
+        growthAnimRef.current = requestAnimationFrame(tick);
+      } else {
+        growthAnimRef.current = null;
+        setStructureGrowth(1);
+      }
+    }
+
+    growthAnimRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  useEffect(() => {
+    animationRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      if (growthAnimRef.current !== null) {
+        cancelAnimationFrame(growthAnimRef.current);
+      }
+    };
+  }, [animate]);
+
+  useEffect(() => {
+    setStructureGrowth(0);
+    structureCameraFiredRef.current = false;
+    if (growthAnimRef.current !== null) {
+      cancelAnimationFrame(growthAnimRef.current);
+      growthAnimRef.current = null;
+    }
+  }, [appState.drawn_location?.lat, appState.drawn_location?.lng]);
+
+  useEffect(() => {
+    if (appState.simulation_status !== 'loading') return;
+
+    setStructureGrowth(0);
+    structureCameraFiredRef.current = false;
+    if (growthAnimRef.current !== null) {
+      cancelAnimationFrame(growthAnimRef.current);
+      growthAnimRef.current = null;
+    }
+  }, [appState.simulation_status]);
+
+  useEffect(() => {
+    if (appState.simulation_status !== 'complete' || !appState.drawn_location) {
+      return;
+    }
+
+    structureCameraFiredRef.current = false;
+    const timer = window.setTimeout(() => {
+      animateStructureGrowth();
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    animateStructureGrowth,
+    appState.drawn_location,
+    appState.simulation_result,
+    appState.simulation_status,
+  ]);
+
+  useEffect(() => {
+    if (structureGrowth < 1 || !appState.drawn_location) return;
+    if (structureCameraFiredRef.current) return;
+
+    structureCameraFiredRef.current = true;
+    deckMapRef.current?.flyToLocation({
+      lat: appState.drawn_location.lat,
+      lng: appState.drawn_location.lng,
+      zoom: 16.1,
+      pitch: 58,
+      bearing: 25,
+    });
+  }, [structureGrowth, appState.drawn_location]);
 
   useEffect(() => {
     let frame = 0;
@@ -229,8 +319,12 @@ export default function HomePage() {
     async function loadMapData() {
       const buildingFeatures = await fetchBuildingsWithType();
       if (cancelled) return;
-
       setBuildings(buildingFeatures);
+      console.log('[map] buildings loaded:', buildingFeatures.length);
+
+      const roadNetwork = await fetchRoads();
+      if (cancelled) return;
+      setRoads(roadNetwork);
     }
 
     loadMapData();
@@ -244,13 +338,9 @@ export default function HomePage() {
     let cancelled = false;
 
     const loadTrafficData = async () => {
-      const [flow, incidentData] = await Promise.all([
-        fetchTrafficFlow(),
-        fetchTrafficIncidents(),
-      ]);
+      const flow = await fetchTrafficFlow();
       if (cancelled) return;
       setTrafficData(flow);
-      setIncidents(incidentData);
       setLastTrafficUpdate(new Date());
     };
 
@@ -281,24 +371,6 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!showIncidents || !incidents.some((incident) => incident.severity === 4)) {
-      return;
-    }
-
-    let animationFrame = 0;
-    const startTime = performance.now();
-
-    const animate = (time: number) => {
-      setIncidentPulse(((time - startTime) % 1200) / 1200);
-      animationFrame = window.requestAnimationFrame(animate);
-    };
-
-    animationFrame = window.requestAnimationFrame(animate);
-
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [incidents, showIncidents]);
-
-  useEffect(() => {
     if (!toastMessage) return;
 
     const timer = window.setTimeout(() => {
@@ -309,37 +381,36 @@ export default function HomePage() {
   }, [toastMessage]);
 
   useEffect(() => {
-    if (!appState.drawn_location) return;
+    if (!appState.drawn_location && !isDrawingMode) return;
 
     let animationFrame = 0;
     const startTime = performance.now();
 
-    const animate = (time: number) => {
+    const pulse = (time: number) => {
       setMarkerPulse(((time - startTime) % 1800) / 1800);
-      animationFrame = window.requestAnimationFrame(animate);
+      animationFrame = window.requestAnimationFrame(pulse);
     };
 
-    animationFrame = window.requestAnimationFrame(animate);
+    animationFrame = window.requestAnimationFrame(pulse);
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [appState.drawn_location]);
+  }, [appState.drawn_location, isDrawingMode]);
 
   useEffect(() => {
-    if (appState.simulation_status !== 'loading') return;
+    if (!appState.active_layers.includes('hospitals')) return;
 
     let animationFrame = 0;
     const startTime = performance.now();
 
-    const animate = (time: number) => {
-      const phase = (time - startTime) % 1500;
-      setZoneScanPulse(0.2 + (phase / 1500) * 0.4);
-      animationFrame = window.requestAnimationFrame(animate);
+    const pulse = (time: number) => {
+      setHospitalPulse(((time - startTime) % 1600) / 1600);
+      animationFrame = window.requestAnimationFrame(pulse);
     };
 
-    animationFrame = window.requestAnimationFrame(animate);
+    animationFrame = window.requestAnimationFrame(pulse);
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [appState.simulation_status]);
+  }, [appState.active_layers]);
 
   useEffect(() => {
     if (viewMode === 'cesium') {
@@ -388,6 +459,14 @@ export default function HomePage() {
     appState.simulation_status,
   ]);
 
+  const trafficTrips = useMemo(() => {
+    return buildTrafficTrips(
+      roads,
+      trafficData,
+      appState.simulation_result,
+    );
+  }, [roads, trafficData, appState.simulation_result]);
+
   const handleBuildingHover = useCallback(
     (info: PickingInfo<BuildingFeature>) => {
       if (!info.object) {
@@ -406,22 +485,6 @@ export default function HomePage() {
     [],
   );
 
-  const handleIncidentHover = useCallback(
-    (info: PickingInfo<TrafficIncident>) => {
-      if (!info.object) {
-        setIncidentTooltip(null);
-        return;
-      }
-
-      setIncidentTooltip({
-        x: info.x,
-        y: info.y,
-        text: formatIncidentTooltip(info.object),
-      });
-    },
-    [],
-  );
-
   const handleBuildingClick = useCallback((building: BuildingFeature) => {
     const [lng, lat] = getBuildingCentroid(building.polygon);
     deckMapRef.current?.flyToLocation({
@@ -433,70 +496,55 @@ export default function HomePage() {
     });
   }, []);
 
-  const buildingLayerConfig = useMemo(() => {
-    const showHospitals = appState.active_layers.includes('hospitals');
-    const showSchools = appState.active_layers.includes('schools');
-    const showAll = appState.active_layers.includes('buildings');
-    const showBuildingLayer = showHospitals || showSchools || showAll;
-
-    let highlightCategory: BuildingHighlightCategory = null;
-    if (showHospitals && showSchools) highlightCategory = 'both';
-    else if (showHospitals) highlightCategory = 'hospital';
-    else if (showSchools) highlightCategory = 'school';
-    else if (showAll) highlightCategory = 'all';
-
-    const visibleBuildings = showAll
-      ? buildings
-      : buildings.filter((building) => {
-          if (building.category === 'hospital') return showHospitals;
-          if (building.category === 'school') return showSchools;
-          return false;
-        });
-
-    return { showBuildingLayer, highlightCategory, visibleBuildings };
-  }, [appState.active_layers, buildings]);
-
   const layers = useMemo((): Layer[] => {
     const nextLayers: Layer[] = [];
+    // console.log('zones:', appState.simulation_result?.affected_zones.length) // debug, remove before demo
 
-    if (appState.active_layers.includes('zones')) {
+    if (appState.active_layers.includes('buildings')) {
+      const buildingLayer = createBuildingLayer({
+        data: buildings,
+        mapZoom,
+        onHover: handleBuildingHover,
+        onClick: handleBuildingClick,
+      });
+      if (buildingLayer) nextLayers.push(buildingLayer);
+    }
+
+    if (appState.drawn_location) {
+      if (structureGrowth < 0.98) {
+        const shockwaveLayer = createPolicyShockwaveLayer({
+          location: appState.drawn_location,
+          growth: structureGrowth,
+        });
+        if (shockwaveLayer) nextLayers.push(shockwaveLayer);
+      }
+
+      const structureLayers = createPolicyStructureLayer({
+        policyType: appState.current_policy,
+        location: appState.drawn_location,
+        growth: structureGrowth,
+        roads,
+      });
+      if (structureLayers) nextLayers.push(...structureLayers);
+    }
+
+    if (appState.active_layers.includes('hospitals')) {
       nextLayers.push(
-        createZoneLayer({
-          data: LAHORE_ZONES,
-          simulationResult: appState.simulation_result,
-          scanning: appState.simulation_status === 'loading',
-          scanPulse: zoneScanPulse,
-        }),
+        createHospitalLayer({ data: buildings, pulse: hospitalPulse }),
       );
     }
 
-    if (buildingLayerConfig.showBuildingLayer) {
-      nextLayers.push(
-        createBuildingLayer({
-          data: buildingLayerConfig.visibleBuildings,
-          highlightCategory: buildingLayerConfig.highlightCategory,
-          onHover: handleBuildingHover,
-          onClick: handleBuildingClick,
-        }),
-      );
+    if (appState.active_layers.includes('schools')) {
+      nextLayers.push(createSchoolLayer({ data: buildings }));
     }
 
-    if (appState.active_layers.includes('traffic')) {
+    if (appState.active_layers.includes('traffic') && trafficTrips.length > 0) {
       nextLayers.push(
-        createTrafficArcLayer({
-          trafficData,
-          simulationResult: appState.simulation_result,
-        }),
-      );
-    }
-
-    if (showIncidents && incidents.length > 0) {
-      nextLayers.push(
-        createIncidentLayer({
-          data: incidents,
-          pulse: incidentPulse,
-          onHover: handleIncidentHover,
-        }),
+        createTrafficParticleLayer(
+          trafficTrips,
+          currentTime,
+          appState.simulation_result,
+        ),
       );
     }
 
@@ -516,7 +564,7 @@ export default function HomePage() {
 
     if (appState.drawn_location) {
       nextLayers.push(
-        createLocationMarkerLayer({
+        createProposedPolicyLayer({
           location: appState.drawn_location,
           pulse: markerPulse,
         }),
@@ -526,16 +574,16 @@ export default function HomePage() {
     return nextLayers;
   }, [
     appState,
-    buildingLayerConfig,
+    buildings,
+    currentTime,
     handleBuildingClick,
     handleBuildingHover,
-    handleIncidentHover,
-    incidentPulse,
-    incidents,
+    hospitalPulse,
+    mapZoom,
     markerPulse,
-    showIncidents,
-    trafficData,
-    zoneScanPulse,
+    roads,
+    structureGrowth,
+    trafficTrips,
   ]);
 
   const handleMapClick = useCallback(
@@ -626,29 +674,21 @@ export default function HomePage() {
         }}
       >
         <DeckMap
-          ref={deckMapRef}
+          onMapHandle={(handle) => {
+            deckMapRef.current = handle;
+          }}
           layers={layers}
           onMapClick={handleMapClick}
           isDrawingMode={isDrawingMode}
           activeTileLayer={activeTileLayer}
-          showTerrain={showTerrain}
-          showLabels={showLabels}
-          showTrafficTiles={showTrafficTiles}
-          showIncidentTiles={showIncidents}
-          showFires={appState.active_layers.includes('fires')}
-          showSurfaceTemp={appState.active_layers.includes('surface-temp')}
+          showTrafficTiles={false} // keep particle traffic only; raster layer looks like blobs
+          onZoomChange={setMapZoom}
         />
       </div>
 
       {viewMode === 'cesium' ? (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-          }}
-        >
+        <div style={{ position: 'absolute', inset: 0 }}>
           <CesiumMap
-            zones={LAHORE_ZONES}
             buildings={buildings}
             simulationResult={appState.simulation_result}
             cameraFlyKey={cesiumFlyKey}
@@ -656,21 +696,18 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      {/* Comparison split-screen — rendered on top when active */}
       {comparisonMode && appState.simulation_result ? (
         <ComparisonMap
           appState={appState}
           buildings={buildings}
+          roads={roads}
           trafficData={trafficData}
           simulationResult={appState.simulation_result}
-          showLabels={showLabels}
-          showTrafficTiles={showTrafficTiles}
-          showFires={appState.active_layers.includes('fires')}
-          showSurfaceTemp={appState.active_layers.includes('surface-temp')}
+          currentTime={currentTime}
+          mapZoom={mapZoom}
         />
       ) : null}
 
-      {/* Exit Comparison button — fixed at top center */}
       {comparisonMode ? (
         <div
           style={{
@@ -697,10 +734,9 @@ export default function HomePage() {
               textTransform: 'uppercase',
               background: 'rgba(239,68,68,0.15)',
               border: '1px solid rgba(239,68,68,0.45)',
-              color: '#ef4444',
+              color: 'var(--alert-danger)',
               backdropFilter: 'blur(8px)',
               cursor: 'pointer',
-              transition: 'background 0.15s',
             }}
           >
             <svg width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -717,10 +753,7 @@ export default function HomePage() {
       />
       <TopBar
         trafficData={trafficData}
-        incidents={incidents}
         lastTrafficUpdate={lastTrafficUpdate}
-        showIncidents={showIncidents}
-        onToggleIncidents={() => setShowIncidents((current) => !current)}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
       />
@@ -736,14 +769,6 @@ export default function HomePage() {
         demoLocked={demoRunning}
         activeTileLayer={activeTileLayer}
         onTileLayerChange={setActiveTileLayer}
-        showTerrain={showTerrain}
-        onTerrainChange={setShowTerrain}
-        showLabels={showLabels}
-        onLabelsChange={setShowLabels}
-        showTrafficTiles={showTrafficTiles}
-        onTrafficTilesChange={setShowTrafficTiles}
-        showIncidents={showIncidents}
-        onIncidentsChange={setShowIncidents}
         weatherWarning={weatherWarning}
         setWeatherWarning={setWeatherWarning}
         onCompare={() => setComparisonMode(true)}
@@ -751,32 +776,16 @@ export default function HomePage() {
 
       <DemoMode onRunningChange={handleDemoRunningChange} />
 
-      {incidentTooltip ? (
-        <div
-          className="pointer-events-none fixed z-50 max-w-xs whitespace-pre-line rounded-md border border-warning/30 bg-navy/95 px-3 py-2 text-xs text-slate-100 shadow-lg shadow-warning/10"
-          style={{
-            left: incidentTooltip.x + 12,
-            top: incidentTooltip.y + 12,
-          }}
-        >
-          {incidentTooltip.text}
-        </div>
-      ) : null}
-
       {buildingTooltip ? (
         <div
-          className="pointer-events-none fixed z-50 rounded-md border border-cyan/30 bg-navy/95 px-3 py-2 text-xs text-slate-100 shadow-lg shadow-cyan/10"
+          className="pointer-events-none fixed z-50 rounded-md border border-accent-warning/30 bg-bg-primary/95 px-3 py-2 text-xs text-slate-100 shadow-lg shadow-accent-warning/10"
           style={{
             left: buildingTooltip.x + 12,
             top: buildingTooltip.y + 12,
           }}
         >
-          <p className="font-medium text-cyan">
-            {buildingTooltip.name}
-          </p>
-          <p className="mt-1 capitalize text-secondary">
-            {buildingTooltip.type}
-          </p>
+          <p className="font-medium text-accent-warning">{buildingTooltip.name}</p>
+          <p className="mt-1 capitalize text-secondary">{buildingTooltip.type}</p>
           <p className="mt-1 text-secondary">
             Height: {buildingTooltip.height.toFixed(1)}m
           </p>

@@ -4,18 +4,19 @@ import { useCallback, useMemo, useState } from 'react';
 import type { Layer } from '@deck.gl/core';
 import { DeckMap } from './DeckMap';
 import {
+  buildTrafficTrips,
   createBuildingLayer,
-  createTrafficArcLayer,
-  createZoneLayer,
-  type BuildingHighlightCategory,
+  createHospitalLayer,
+  createSchoolLayer,
+  createTrafficParticleLayer,
 } from '@/components/map/layers';
-import { LAHORE_ZONES } from '@/lib/lahoreData';
 import type {
   AppState,
   BuildingFeature,
   SimulationResponse,
 } from '@/types';
 import type { TrafficFlowSegment } from '@/lib/tomtom';
+import type { RoadFeatureCollection } from '@/lib/overpass';
 
 const INITIAL_SHARED_VIEW = {
   longitude: 74.3587,
@@ -28,41 +29,13 @@ const INITIAL_SHARED_VIEW = {
 export interface ComparisonMapProps {
   appState: AppState;
   buildings: BuildingFeature[];
+  roads: RoadFeatureCollection;
   trafficData: TrafficFlowSegment[];
   simulationResult: SimulationResponse;
-  showLabels?: boolean;
-  showTrafficTiles?: boolean;
-  showFires?: boolean;
-  showSurfaceTemp?: boolean;
+  currentTime: number;
+  mapZoom: number;
 }
 
-function getBuildingLayerConfig(
-  activeLayers: AppState['active_layers'],
-  buildings: BuildingFeature[],
-) {
-  const showHospitals = activeLayers.includes('hospitals');
-  const showSchools = activeLayers.includes('schools');
-  const showAll = activeLayers.includes('buildings');
-  const showBuildingLayer = showHospitals || showSchools || showAll;
-
-  let highlightCategory: BuildingHighlightCategory = null;
-  if (showHospitals && showSchools) highlightCategory = 'both';
-  else if (showHospitals) highlightCategory = 'hospital';
-  else if (showSchools) highlightCategory = 'school';
-  else if (showAll) highlightCategory = 'all';
-
-  const visibleBuildings = showAll
-    ? buildings
-    : buildings.filter((building) => {
-        if (building.category === 'hospital') return showHospitals;
-        if (building.category === 'school') return showSchools;
-        return false;
-      });
-
-  return { showBuildingLayer, highlightCategory, visibleBuildings };
-}
-
-// ── Delta badge ──────────────────────────────────────────────────────────────
 function DeltaBadge({ value, invert = false }: { value: number; invert?: boolean }) {
   const good = invert ? value < 0 : value < 0;
   const formatted = `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
@@ -75,9 +48,8 @@ function DeltaBadge({ value, invert = false }: { value: number; invert?: boolean
         borderRadius: 99,
         fontSize: 11,
         fontWeight: 700,
-        letterSpacing: '0.01em',
         background: good ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.18)',
-        color: good ? '#10b981' : '#ef4444',
+        color: good ? 'var(--success)' : 'var(--alert-danger)',
       }}
     >
       {formatted}
@@ -85,12 +57,11 @@ function DeltaBadge({ value, invert = false }: { value: number; invert?: boolean
   );
 }
 
-// ── Thin stats bar between the two maps ─────────────────────────────────────
 function ComparisonStatsBar({ result }: { result: SimulationResponse }) {
   const t = result.city_totals;
   const trafficDelta = +(t.after.traffic_score - t.before.traffic_score).toFixed(1);
-  const floodDelta   = +(t.after.flood_risk - t.before.flood_risk).toFixed(1);
-  const emergDelta   = +(t.after.emergency_minutes - t.before.emergency_minutes).toFixed(1);
+  const floodDelta = +(t.after.flood_risk - t.before.flood_risk).toFixed(1);
+  const emergDelta = +(t.after.emergency_minutes - t.before.emergency_minutes).toFixed(1);
 
   const stats = [
     { label: 'Traffic', before: t.before.traffic_score, after: t.after.traffic_score, delta: trafficDelta, invert: true },
@@ -125,11 +96,11 @@ function ComparisonStatsBar({ result }: { result: SimulationResponse }) {
             {s.label}
           </span>
           <span style={{ color: '#f1f5f9', fontWeight: 600 }}>
-            {s.before.toFixed(1)}{s.suffix ? ' ' + s.suffix : ''}
+            {s.before.toFixed(1)}{s.suffix ? ` ${s.suffix}` : ''}
           </span>
           <span style={{ color: '#475569' }}>→</span>
           <span style={{ color: '#f1f5f9', fontWeight: 600 }}>
-            {s.after.toFixed(1)}{s.suffix ? ' ' + s.suffix : ''}
+            {s.after.toFixed(1)}{s.suffix ? ` ${s.suffix}` : ''}
           </span>
           <DeltaBadge value={s.delta} invert={s.invert} />
         </div>
@@ -138,14 +109,13 @@ function ComparisonStatsBar({ result }: { result: SimulationResponse }) {
   );
 }
 
-// ── Map label pill ────────────────────────────────────────────────────────────
 function MapLabel({ text, side }: { text: string; side: 'before' | 'after' }) {
   return (
     <div
       style={{
         position: 'absolute',
-        top: 40 + 8 + (48 + 40),
-        left: side === 'before' ? 12 : 12,
+        top: 96,
+        left: 12,
         zIndex: 20,
         pointerEvents: 'none',
       }}
@@ -167,7 +137,7 @@ function MapLabel({ text, side }: { text: string; side: 'before' | 'after' }) {
           border: side === 'before'
             ? '1px solid rgba(100,116,139,0.4)'
             : '1px solid rgba(0,212,255,0.5)',
-          color: side === 'before' ? '#cbd5e1' : '#00d4ff',
+          color: side === 'before' ? '#cbd5e1' : 'var(--accent-warning)',
           backdropFilter: 'blur(4px)',
         }}
       >
@@ -176,7 +146,7 @@ function MapLabel({ text, side }: { text: string; side: 'before' | 'after' }) {
             width: 6,
             height: 6,
             borderRadius: '50%',
-            background: side === 'before' ? '#64748b' : '#00d4ff',
+            background: side === 'before' ? '#64748b' : 'var(--accent-warning)',
             flexShrink: 0,
           }}
         />
@@ -186,14 +156,13 @@ function MapLabel({ text, side }: { text: string; side: 'before' | 'after' }) {
   );
 }
 
-// ── Vertical divider ──────────────────────────────────────────────────────────
 function Divider() {
   return (
     <div
       aria-hidden
       style={{
         position: 'absolute',
-        top: 48 + 40,
+        top: 88,
         bottom: 0,
         left: '50%',
         width: 2,
@@ -208,61 +177,85 @@ function Divider() {
 function buildComparisonLayers(
   appState: AppState,
   buildings: BuildingFeature[],
+  roads: RoadFeatureCollection,
   trafficData: TrafficFlowSegment[],
   simulationResult: SimulationResponse | null,
+  currentTime: number,
+  mapZoom: number,
 ): Layer[] {
   const active = appState.active_layers;
-  const { showBuildingLayer, highlightCategory, visibleBuildings } =
-    getBuildingLayerConfig(active, buildings);
+  const arr: Layer[] = [];
 
-  return [
-    ...(active.includes('zones')
-      ? [createZoneLayer({ data: LAHORE_ZONES, simulationResult })]
-      : []),
-    ...(showBuildingLayer
-      ? [
-          createBuildingLayer({
-            data: visibleBuildings,
-            highlightCategory,
-          }),
-        ]
-      : []),
-    ...(active.includes('traffic')
-      ? [createTrafficArcLayer({ trafficData, simulationResult })]
-      : []),
-  ];
+  if (active.includes('buildings')) {
+    const buildingLayer = createBuildingLayer({ data: buildings, mapZoom });
+    if (buildingLayer) arr.push(buildingLayer);
+  }
+
+  if (active.includes('hospitals')) {
+    arr.push(createHospitalLayer({ data: buildings, pulse: 0 }));
+  }
+
+  if (active.includes('schools')) {
+    arr.push(createSchoolLayer({ data: buildings }));
+  }
+
+  if (active.includes('traffic')) {
+    const trips = buildTrafficTrips(roads, trafficData, simulationResult);
+    if (trips.length > 0) {
+      arr.push(
+        createTrafficParticleLayer(trips, currentTime, simulationResult),
+      );
+    }
+  }
+
+  return arr;
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
 export function ComparisonMap({
   appState,
   buildings,
+  roads,
   trafficData,
   simulationResult,
-  showLabels = true,
-  showTrafficTiles = true,
-  showFires = false,
-  showSurfaceTemp = false,
+  currentTime,
+  mapZoom,
 }: ComparisonMapProps) {
   const [sharedViewState, setSharedViewState] = useState(INITIAL_SHARED_VIEW);
 
   const handleViewStateChange = useCallback((vs: typeof INITIAL_SHARED_VIEW) => {
     setSharedViewState(vs);
+    // console.log('sync view', vs.zoom);
   }, []);
 
   const beforeLayers = useMemo(
     (): Layer[] =>
-      buildComparisonLayers(appState, buildings, trafficData, null),
-    [appState, buildings, trafficData],
+      buildComparisonLayers(
+        appState,
+        buildings,
+        roads,
+        trafficData,
+        null,
+        currentTime,
+        mapZoom,
+      ),
+    [appState, buildings, roads, trafficData, currentTime, mapZoom],
   );
 
   const afterLayers = useMemo(
     (): Layer[] =>
-      buildComparisonLayers(appState, buildings, trafficData, simulationResult),
-    [appState, buildings, trafficData, simulationResult],
+      buildComparisonLayers(
+        appState,
+        buildings,
+        roads,
+        trafficData,
+        simulationResult,
+        currentTime,
+        mapZoom,
+      ),
+    [appState, buildings, roads, trafficData, simulationResult, currentTime, mapZoom],
   );
 
-  const mapAreaTop = 48 + 40;
+  const mapAreaTop = 88; // clears topbar + stats strip
   const mapHeight = `calc(100vh - ${mapAreaTop}px)`;
   const halfWidth = 'calc((100vw - 380px) / 2)';
 
@@ -286,12 +279,9 @@ export function ComparisonMap({
           <MapLabel text="Before Policy" side="before" />
           <DeckMap
             layers={beforeLayers}
-            onMapClick={() => {/* no-op in comparison */}}
+            onMapClick={() => undefined}
             isDrawingMode={false}
-            showLabels={showLabels}
-            showTrafficTiles={showTrafficTiles}
-            showFires={showFires}
-            showSurfaceTemp={showSurfaceTemp}
+            showTrafficTiles={false}
             externalViewState={sharedViewState}
             onViewStateChange={handleViewStateChange}
           />
@@ -301,12 +291,9 @@ export function ComparisonMap({
           <MapLabel text="After Policy" side="after" />
           <DeckMap
             layers={afterLayers}
-            onMapClick={() => {/* no-op in comparison */}}
+            onMapClick={() => undefined}
             isDrawingMode={false}
-            showLabels={showLabels}
-            showTrafficTiles={showTrafficTiles}
-            showFires={showFires}
-            showSurfaceTemp={showSurfaceTemp}
+            showTrafficTiles={false}
             externalViewState={sharedViewState}
             onViewStateChange={handleViewStateChange}
           />

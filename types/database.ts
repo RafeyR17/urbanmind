@@ -6,6 +6,8 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+// TODO: regenerate from supabase cli when schema changes
+
 export type InfrastructureType =
   | 'hospital'
   | 'school'

@@ -1,12 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Lora:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap');
 @import 'maplibre-gl/dist/maplibre-gl.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* lahore dossier palette — don't rename vars, half the app imports them */
 :root {
-  --background: #0a0f1e;
-  --foreground: #f1f5f9;
+  /* Surfaces */
+  --bg-primary: #15140f;
+  --bg-panel: #1c1a14;
+
+  /* Text */
+  --paper: #ede9df;
+  --paper-dim: #ede9df99;
+
+  /* Accents */
+  --stamp-red: #a3231f;
+  --file-olive: #6b6852;
+  --hairline: #3a3829;
+  --success-stamp: #3d5c3a;
+
+  /* Typography */
+  --font-serif: 'Source Serif 4', 'Lora', Georgia, 'Times New Roman', serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Shape */
+  --radius: 2px;
+
+  /* Legacy aliases — consumed by existing components until migrated */
+  --background: var(--bg-primary);
+  --foreground: var(--paper);
+  --accent-warning: var(--stamp-red);
 }
 
 * {
@@ -18,8 +44,9 @@ body {
   min-height: 100%;
   margin: 0;
   padding: 0;
-  color: var(--foreground);
-  background: var(--background);
+  font-family: var(--font-sans);
+  color: var(--paper);
+  background: var(--bg-primary);
 }
 
 body {
@@ -28,7 +55,7 @@ body {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #00d4ff #1e293b;
+  scrollbar-color: var(--stamp-red) var(--bg-panel);
 }
 
 *::-webkit-scrollbar {
@@ -37,18 +64,19 @@ body {
 }
 
 *::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: var(--bg-panel);
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #00d4ff;
-  border-radius: 999px;
+  background: var(--stamp-red);
+  border-radius: var(--radius);
 }
 
+/* frosted panel — used on sidebar + toasts */
 .glass {
-  background: rgba(10, 15, 30, 0.92);
+  background: rgba(28, 26, 20, 0.92); /* ~92% opacity felt right on projector */
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--hairline);
 }
 
 .pulse-dot {

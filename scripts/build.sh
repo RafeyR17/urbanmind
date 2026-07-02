@@ -17,7 +17,7 @@ if command -v lsof >/dev/null 2>&1 && lsof -ti:"${PORT}" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[build] Clearing .next..."
+echo "[build] Clearing .next..."  # stale chunks = mysterious 404s
 rm -rf .next
 
 node scripts/copy-cesium.js

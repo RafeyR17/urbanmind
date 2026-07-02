@@ -78,9 +78,9 @@ function getPrecipitationMm(payload: OpenWeatherResponse): number {
 
 function getFloodRiskModifier(isRaining: boolean, precipitationMm: number): number {
   if (!isRaining) return 0;
-  if (precipitationMm > 10) return 0.4;
+  if (precipitationMm > 10) return 0.4; // lahore drains can't handle >10mm/hr
   if (precipitationMm > 5) return 0.25;
-  return 0.1;
+  return 0.1; // light rain still bumps flood model a bit
 }
 
 function mapWeatherResponse(
@@ -116,8 +116,8 @@ async function fetchOpenWeatherJson<T>(url: URL): Promise<T | null> {
     const response = await fetch(url.toString(), { cache: 'no-store' });
     if (!response.ok) return null;
     return (await response.json()) as T;
-  } catch (error) {
-    console.error('[weather] Request failed:', error);
+  } catch (e) {
+    console.error(e);
     return null;
   }
 }
@@ -188,7 +188,7 @@ export function getAQIColor(aqi: number): string {
   }
 }
 
-// Precipitation/wind/temp tiles use OpenWeatherMap — Stadia has no weather raster data.
+// OWM tiles — stadia doesn't have weather rasters
 function buildTileUrl(layer: string): string {
   const key = WEATHER_API_KEY;
   if (!key) return '';

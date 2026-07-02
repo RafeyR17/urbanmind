@@ -26,10 +26,10 @@ export function calculateOverallImpactScore(
   const floodDelta = after.flood_risk - before.flood_risk;
   const emergencyDelta = after.emergency_minutes - before.emergency_minutes;
 
-  return -trafficDelta * 0.4 + -floodDelta * 0.4 + -emergencyDelta * 0.2;
+  return -trafficDelta * 0.4 + -floodDelta * 0.4 + -emergencyDelta * 0.2; // weights from whiteboard
 }
 
-function findAffectedZone(
+function findAffZone(
   zone: DistrictZone,
   simulationResult: SimulationResponse,
 ) {
@@ -46,7 +46,7 @@ export function getZoneFillColor(
     return DEFAULT_FILL;
   }
 
-  const affected = findAffectedZone(zone, simulationResult);
+  const affected = findAffZone(zone, simulationResult);
   if (!affected) {
     return DEFAULT_FILL;
   }
@@ -74,16 +74,16 @@ export function getZoneElevation(
   const baseRisk = zone.flood_risk;
 
   if (!simulationResult) {
-    return Math.min(baseRisk * ELEVATION_SCALE, MAX_ELEVATION);
+    return Math.min(baseRisk * 150, MAX_ELEVATION); // 150 = deck extrusion scale
   }
 
-  const affected = findAffectedZone(zone, simulationResult);
+  const affected = findAffZone(zone, simulationResult);
   const risk = affected?.after.flood_risk ?? baseRisk;
 
   return Math.min(risk * ELEVATION_SCALE, MAX_ELEVATION);
 }
 
-/** RGBA 0–255 for Cesium entity materials */
+// rgba tuple for cesium materials
 export function getZoneRgba(
   zone: DistrictZone,
   simulationResult?: SimulationResponse | null,

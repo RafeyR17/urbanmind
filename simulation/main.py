@@ -95,7 +95,7 @@ emergency_model = LahoreEmergencyModel()
 
 app = FastAPI(
     title="UrbanIQ Simulation API",
-    description="FastAPI backend for Lahore urban policy simulations.",
+    description="hackathon fastapi backend — lahore policy sims",
     version="0.1.0",
 )
 
@@ -160,7 +160,7 @@ async def health() -> dict[str, str]:
 @app.post("/simulate", response_model=SimulationResponse)
 async def simulate(request: SimulationRequest) -> SimulationResponse:
     started_at = time.perf_counter()
-    delay_ms = random.randint(800, 1200)
+    delay_ms = random.randint(800, 1200)  # fake "compute" pause so UI spinner feels real
 
     location = request.location.model_dump()
     parameters = (request.parameters or SimulationParameters()).model_dump(
@@ -277,6 +277,7 @@ def build_city_totals(
 
 
 def create_bounding_polygon(lat: float, lng: float, delta: float = 0.02) -> dict:
+    # ~2km box around centroid — good enough for deck.gl heatmap
     return {
         "type": "Polygon",
         "coordinates": [
@@ -300,6 +301,7 @@ def economic_score(
     flood_risk: float,
     emergency_minutes: float,
 ) -> float:
+    # weights from whiteboard scribble — traffic hurts most
     return round(clamp(100 - traffic_score * 0.35 - flood_risk * 0.25 - emergency_minutes * 1.2, 0, 100), 1)
 
 

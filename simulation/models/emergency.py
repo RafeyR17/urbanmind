@@ -88,8 +88,9 @@ class LahoreEmergencyModel:
             distance_km(zone_centroid, hospital_location)
             for _, hospital_location in hospitals
         )
-        urban_speed_kmh = 28
-        dispatch_buffer_minutes = 3.5
+        urban_speed_kmh = 28  # ambulances don't hit 60 in gulberg
+        dispatch_buffer_minutes = 3.5  # call center + dispatch lag
+        # rough drive time — not google maps accurate
         return nearest_distance / urban_speed_kmh * 60 + dispatch_buffer_minutes
 
     def _simulate_new_hospital(self, location: tuple[float, float]) -> ZoneDelta:
@@ -102,7 +103,7 @@ class LahoreEmergencyModel:
             after_minutes = min(current_minutes, modeled_after)
 
             if zone_id in {"johar-town", "township", "faisal-town"}:
-                after_minutes *= 0.88
+                after_minutes *= 0.88  # south lahore gets extra bump from new hospital
 
             deltas[zone_id] = round(clamp(after_minutes - current_minutes, -9.0, 0.0), 1)
 

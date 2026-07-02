@@ -26,6 +26,7 @@ export interface SimulationResultsProps {
   onGetAIAnalysis: () => void;
   isAnalyzing: boolean;
   onCompare: () => void;
+  onRenewSimulation: () => void;
 }
 
 interface MetricCardProps {
@@ -37,7 +38,9 @@ interface MetricCardProps {
   value?: string;
   suffix?: string;
   improved: boolean;
-  deltaLabel: string;
+  positiveLabel: string;
+  negativeLabel: string;
+  threshold: number;
   index?: number;
 }
 
@@ -86,6 +89,8 @@ function useCountUp(value: number, duration = 1500) {
   return displayValue;
 }
 
+// function useCountUpSimple(val: number) { return val; } // forgot to delete
+
 
 function MetricCard({
   title,
@@ -96,10 +101,19 @@ function MetricCard({
   value,
   suffix = '',
   improved,
-  deltaLabel,
+  positiveLabel,
+  negativeLabel,
+  threshold,
 }: MetricCardProps) {
   const beforeValue = useCountUp(before ?? 0);
   const afterValue = useCountUp(after ?? 0);
+  const delta = (after ?? 0) - (before ?? 0);
+  const isSignificant = Math.abs(delta) >= threshold;
+  const badgeLabel = !isSignificant
+    ? 'No significant change'
+    : improved
+      ? positiveLabel
+      : negativeLabel;
 
   return (
     <motion.div
@@ -111,7 +125,7 @@ function MetricCard({
           {title}
         </p>
         <Icon
-          className="h-4 w-4 text-cyan"
+          className="h-4 w-4 text-accent-warning"
           aria-hidden
           data-icon={tablerIcon}
         />
@@ -122,12 +136,14 @@ function MetricCard({
       </p>
       <span
         className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${
-          improved
-            ? 'bg-success/15 text-success'
-            : 'bg-danger/15 text-danger'
+          !isSignificant
+            ? 'bg-white/10 text-file-olive'
+            : improved
+              ? 'bg-success/15 text-success'
+              : 'bg-alert-danger/15 text-alert-danger'
         }`}
       >
-        {deltaLabel}
+        {badgeLabel}
       </span>
     </motion.div>
   );
@@ -135,10 +151,12 @@ function MetricCard({
 
 export default function SimulationResults({
   appState,
+  setActiveTab,
   weatherWarning,
   onGetAIAnalysis,
   isAnalyzing,
   onCompare,
+  onRenewSimulation,
 }: SimulationResultsProps) {
   const result = appState.simulation_result;
 
@@ -162,11 +180,13 @@ export default function SimulationResults({
     result.city_totals.after.economic_score -
     result.city_totals.before.economic_score;
 
+  // console.log('rendering results', result.simulation_id);
+
   return (
     <div className="space-y-4">
       {result._isMock ? (
-        <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-amber-100">
-          <span className="font-semibold text-warning">Offline mode</span>
+        <div className="rounded-xl border border-accent-warning/30 bg-accent-warning/10 px-4 py-3 text-sm text-amber-100">
+          <span className="font-semibold text-accent-warning">Offline mode</span>
           {' — '}
           Cached Lahore scenario data
           <span className="ml-2 text-xs text-amber-200/80">
@@ -202,7 +222,9 @@ export default function SimulationResults({
           before={result.city_totals.before.traffic_score}
           after={result.city_totals.after.traffic_score}
           improved={trafficDelta < 0}
-          deltaLabel={trafficDelta < 0 ? 'Improved' : 'Worse'}
+          positiveLabel="Improved"
+          negativeLabel="Worse"
+          threshold={1.5} // below this we call it "no significant change"
         />
         <MetricCard
           title="Flood Risk"
@@ -211,7 +233,9 @@ export default function SimulationResults({
           before={result.city_totals.before.flood_risk}
           after={result.city_totals.after.flood_risk}
           improved={floodDelta < 0}
-          deltaLabel={floodDelta < 0 ? 'Risk down' : 'Risk up'}
+          positiveLabel="Risk down"
+          negativeLabel="Risk up"
+          threshold={1.5}
         />
         <MetricCard
           title="Emergency Response"
@@ -221,7 +245,9 @@ export default function SimulationResults({
           after={result.city_totals.after.emergency_minutes}
           suffix=" min"
           improved={emergencyDelta < 0}
-          deltaLabel={emergencyDelta < 0 ? 'Faster' : 'Slower'}
+          positiveLabel="Faster"
+          negativeLabel="Slower"
+          threshold={0.3}
         />
         <MetricCard
           title="Economic Score"
@@ -230,12 +256,14 @@ export default function SimulationResults({
           before={result.city_totals.before.economic_score}
           after={result.city_totals.after.economic_score}
           improved={economicDelta > 0}
-          deltaLabel={economicDelta > 0 ? 'Stronger' : economicDelta < 0 ? 'Weaker' : 'Flat'}
+          positiveLabel="Stronger"
+          negativeLabel="Weaker"
+          threshold={1.5}
         />
       </motion.div>
 
       <motion.button
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan to-cyan-dark px-4 py-3 text-sm font-semibold text-navy shadow-lg shadow-cyan/20 disabled:cursor-wait disabled:opacity-70"
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan to-cyan-dark px-4 py-3 text-sm font-semibold text-bg-primary shadow-lg shadow-accent-warning/20 disabled:cursor-wait disabled:opacity-70"
         type="button"
         disabled={isAnalyzing}
         whileHover={!isAnalyzing ? { scale: 1.01 } : undefined}
@@ -243,7 +271,7 @@ export default function SimulationResults({
         onClick={onGetAIAnalysis}
       >
         {isAnalyzing ? (
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-navy border-t-transparent" />
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-bg-primary border-t-transparent" />
         ) : null}
         {isAnalyzing ? 'Analyzing with UrbanMind...' : 'Get AI Analysis'}
       </motion.button>
@@ -271,6 +299,60 @@ export default function SimulationResults({
         </svg>
         Compare Before / After
       </motion.button>
+
+      <div className="border-t border-hairline pt-4">
+        <p
+          className="uppercase"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--file-olive)',
+          }}
+        >
+          Run another simulation
+        </p>
+        <p
+          className="mt-2 text-sm leading-relaxed"
+          style={{
+            fontFamily: 'var(--font-sans)',
+            color: 'var(--paper-dim)',
+          }}
+        >
+          Open Policy Studio to adjust settings, place a new site on the map with{' '}
+          <span style={{ fontFamily: 'var(--font-mono)' }}>Draw on Map</span>, then
+          click <span style={{ fontFamily: 'var(--font-mono)' }}>Run Simulation</span>.
+        </p>
+        <button
+          className="mt-3 w-full border border-hairline px-3 py-2 uppercase transition hover:border-stamp-red hover:bg-stamp-red hover:text-bg-primary"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            letterSpacing: '0.5px',
+            color: 'var(--paper-dim)',
+            background: 'transparent',
+            borderRadius: 'var(--radius)',
+          }}
+          type="button"
+          onClick={onRenewSimulation}
+        >
+          Renew Simulation
+        </button>
+        <button
+          className="mt-2 w-full border border-hairline px-3 py-2 uppercase"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            letterSpacing: '0.5px',
+            color: 'var(--file-olive)',
+            background: 'transparent',
+            borderRadius: 'var(--radius)',
+          }}
+          type="button"
+          onClick={() => setActiveTab('studio')}
+        >
+          Back to Policy Studio
+        </button>
+      </div>
     </div>
   );
 }

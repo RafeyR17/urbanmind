@@ -6,8 +6,6 @@ import {
   Brain,
   Car,
   Check,
-  CircleCheck,
-  CircleX,
   Droplets,
   Leaf,
   TrendingUp,
@@ -53,27 +51,28 @@ const itemVariants: Variants = {
 
 const VERDICT_STYLES = {
   recommended: {
-    bg: 'bg-success/20',
-    border: 'border-success',
-    color: '#10b981',
-    icon: CircleCheck,
+    color: 'var(--success-stamp)',
     label: 'RECOMMENDED',
   },
   conditional: {
-    bg: 'bg-warning/20',
-    border: 'border-warning',
-    color: '#f59e0b',
-    icon: AlertTriangle,
+    color: 'var(--file-olive)',
     label: 'CONDITIONAL',
   },
   not_recommended: {
-    bg: 'bg-danger/20',
-    border: 'border-danger',
-    color: '#ef4444',
-    icon: CircleX,
+    color: 'var(--stamp-red)',
     label: 'NOT RECOMMENDED',
   },
 } as const;
+
+function formatAssessmentDate(): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+    .format(new Date())
+    .toUpperCase();
+}
 
 const METRIC_CONFIG: Array<{
   key: keyof ImpactScores;
@@ -113,20 +112,20 @@ function LoadingState() {
         animate={{ scale: [1, 1.1, 1] }}
         transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
       >
-        <Brain className="text-cyan" data-icon="ti-brain" size={32} />
+        <Brain className="text-accent-warning" data-icon="ti-brain" size={32} />
       </motion.div>
-      <p className="text-center text-sm text-cyan">UrbanMind is analyzing...</p>
+      <p className="text-center text-sm text-accent-warning">UrbanMind is analyzing...</p>
       <div className="flex w-full flex-col gap-3">
-        {[0, 1, 2].map((index) => (
+        {[0, 1, 2].map((idx) => (
           <motion.div
-            key={index}
+            key={idx}
             className="h-[60px] rounded-lg"
             style={{ background: 'rgba(255,255,255,0.05)' }}
             animate={{ opacity: [0.3, 0.7, 0.3] }}
             transition={{
               duration: 1.5,
               repeat: Infinity,
-              delay: index * 0.2,
+              delay: idx * 0.2,
             }}
           />
         ))}
@@ -137,34 +136,54 @@ function LoadingState() {
 
 function VerdictBanner({ verdict }: { verdict: AIRecommendation['verdict'] }) {
   const style = VERDICT_STYLES[verdict];
-  const Icon = style.icon;
 
   return (
-    <motion.div
-      className={`flex w-full items-center gap-3 rounded-lg border border-l-4 p-4 ${style.bg} ${style.border}`}
-      initial={{ scale: 0.9, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ duration: 0.4 }}
-    >
-      <Icon
-        className="shrink-0"
-        data-icon={
-          verdict === 'recommended'
-            ? 'ti-circle-check'
-            : verdict === 'conditional'
-              ? 'ti-alert-triangle'
-              : 'ti-circle-x'
-        }
-        size={22}
-        style={{ color: style.color }}
-      />
-      <p
-        className="text-lg font-semibold tracking-wide"
-        style={{ color: style.color }}
+    <div className="relative flex flex-col items-center px-2 py-8">
+      <motion.div
+        className="relative font-bold uppercase"
+        initial={{ opacity: 0, scale: 1.4, rotate: 0 }}
+        animate={{ opacity: 1, scale: 1, rotate: -6 }}
+        transition={{
+          type: 'spring',
+          stiffness: 300,
+          damping: 15,
+          duration: 0.4,
+        }}
+        style={{
+          fontFamily: 'var(--font-serif)',
+          color: style.color,
+          border: '3px solid currentColor',
+          padding: '8px 20px',
+          borderRadius: 'var(--radius)',
+          letterSpacing: '2px',
+        }}
       >
-        {style.label}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.12]"
+          style={{
+            borderRadius: 'var(--radius)',
+            backgroundImage: `
+              radial-gradient(circle at 15% 25%, currentColor 0%, transparent 42%),
+              radial-gradient(circle at 85% 75%, currentColor 0%, transparent 38%),
+              radial-gradient(circle at 55% 45%, currentColor 0%, transparent 30%)
+            `,
+          }}
+        />
+        <span className="relative z-10">{style.label}</span>
+      </motion.div>
+
+      <p
+        className="mt-4 text-center"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '10px',
+          color: 'var(--paper-dim)',
+        }}
+      >
+        ASSESSED BY UrbanIQ REVIEWING SYSTEM · {formatAssessmentDate()}
       </p>
-    </motion.div>
+    </div>
   );
 }
 
@@ -189,7 +208,7 @@ function ExecutiveSummary({
 }
 
 function ScoreNeedle({ score }: { score: number }) {
-  const position = ((score + 10) / 20) * 100;
+  const position = ((score + 10) / 20) * 100; // -10..10 mapped to bar width
 
   return (
     <div className="relative mt-2 h-3 w-full">
@@ -197,7 +216,7 @@ function ScoreNeedle({ score }: { score: number }) {
         className="h-1.5 w-full rounded-full"
         style={{
           background:
-            'linear-gradient(to right, #ef4444 0%, #ef4444 50%, #10b981 50%, #10b981 100%)',
+            'linear-gradient(to right, var(--alert-danger) 0%, var(--alert-danger) 50%, var(--success) 50%, var(--success) 100%)',
         }}
       />
       <div
@@ -217,13 +236,13 @@ function ImpactScoresPanel({ scores }: { scores: ImpactScores }) {
       {METRIC_CONFIG.map(({ key, label, icon: Icon, tablerIcon }) => {
         const score = scores[key];
         const scoreClass =
-          score > 0 ? 'text-success' : score < 0 ? 'text-danger' : 'text-muted';
+          score > 0 ? 'text-success' : score < 0 ? 'text-alert-danger' : 'text-text-text-muted';
         const formatted = `${score > 0 ? '+' : ''}${score}`;
 
         return (
           <div key={key} className="flex flex-col items-center text-center">
             <Icon
-              className="mb-1 text-muted"
+              className="mb-1 text-text-text-muted"
               data-icon={tablerIcon}
               size={16}
             />
@@ -231,7 +250,7 @@ function ImpactScoresPanel({ scores }: { scores: ImpactScores }) {
             <p className={`mt-2 text-sm font-semibold ${scoreClass}`}>
               {formatted}
             </p>
-            <p className="mt-1 text-[11px] uppercase tracking-wide text-muted">
+            <p className="mt-1 text-[11px] uppercase tracking-wide text-text-text-muted">
               {label}
             </p>
           </div>
@@ -243,8 +262,8 @@ function ImpactScoresPanel({ scores }: { scores: ImpactScores }) {
 
 function SeverityBadge({ severity }: { severity: RiskItem['severity'] }) {
   const classes = {
-    high: 'bg-danger/20 text-danger',
-    medium: 'bg-warning/20 text-warning',
+    high: 'bg-alert-danger/20 text-alert-danger',
+    medium: 'bg-accent-warning/20 text-accent-warning',
     low: 'bg-white/10 text-secondary',
   };
 
@@ -270,13 +289,13 @@ function RisksList({ risks }: { risks: RiskItem[] }) {
       >
         <span className="flex items-center gap-2 text-sm font-medium text-slate-100">
           <AlertTriangle
-            className="text-warning"
+            className="text-accent-warning"
             data-icon="ti-alert-triangle"
             size={16}
           />
           Risks
         </span>
-        <span className="rounded-full bg-danger/15 px-2 py-0.5 text-[11px] font-semibold text-danger">
+        <span className="rounded-full bg-alert-danger/15 px-2 py-0.5 text-[11px] font-semibold text-alert-danger">
           {risks.length}
         </span>
       </button>
@@ -394,14 +413,14 @@ function AlternativeCards({
           <p className="mt-1 text-xs leading-relaxed text-secondary">
             {alternative.description}
           </p>
-          <p className="mt-2 text-sm font-semibold text-cyan">
+          <p className="mt-2 text-sm font-semibold text-accent-warning">
             ₨{(alternative.estimated_cost_pkr / 1_000_000_000).toFixed(1)}B
           </p>
           <p className="mt-1 text-[11px] text-success">
             {alternative.expected_improvement}
           </p>
           <button
-            className="mt-auto pt-3 text-left text-xs font-medium text-cyan hover:underline"
+            className="mt-auto pt-3 text-left text-xs font-medium text-accent-warning hover:underline"
             type="button"
             onClick={() => onSimulateAlternative(alternative)}
           >
@@ -448,9 +467,10 @@ function AskUrbanMind({
 
       onRecommendation(recommendation);
       setAnswer(recommendation.executive_summary);
+      console.log('ask urbanmind done, verdict:', recommendation.verdict);
     } catch (error) {
-      console.error('[AskUrbanMind] Failed:', error);
-      setAnswer('Unable to get a response right now. Please try again.');
+      console.error('[AskUrbanMind]', error);
+      setAnswer('nah api is down, try again');
     } finally {
       setIsAsking(false);
     }
@@ -460,13 +480,13 @@ function AskUrbanMind({
     <motion.div className="space-y-3" variants={itemVariants}>
       <form className="space-y-2" onSubmit={handleSubmit}>
         <input
-          className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-cyan"
+          className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-accent-warning"
           placeholder="Ask about this policy decision..."
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
         />
         <button
-          className="rounded-lg bg-cyan px-3 py-1.5 text-xs font-semibold text-navy disabled:opacity-60"
+          className="rounded-lg bg-accent-warning px-3 py-1.5 text-xs font-semibold text-bg-primary disabled:opacity-60"
           disabled={isAsking || !question.trim()}
           type="submit"
         >
@@ -478,7 +498,6 @@ function AskUrbanMind({
           {answer}
         </p>
       ) : null}
-      <p className="text-[10px] text-muted">Powered by OpenRouter</p>
     </motion.div>
   );
 }

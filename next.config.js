@@ -27,7 +27,7 @@ const nextConfig = {
       zlib: false,
     };
 
-    // External / network drives (e.g. /media/...) break webpack HMR and chunk writes.
+    // cesium on external drives is pain — disable webpack cache in dev
     if (dev) {
       config.cache = false;
       config.watchOptions = {

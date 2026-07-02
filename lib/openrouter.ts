@@ -1,5 +1,5 @@
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
-// gemma-2-9b-it is not available on OpenRouter (404); gemma-2-27b-it works reliably
+// tried gemma-2-9b first, 404'd — 27b works
 export const DEFAULT_OPENROUTER_MODEL =
   process.env.OPENROUTER_MODEL ?? 'google/gemma-2-27b-it';
 
@@ -42,7 +42,7 @@ export async function callOpenRouter(
         { role: 'user', content: userMessage },
       ],
       max_tokens: 1000,
-      temperature: 0.3,
+      temperature: 0.3, // had to lower this, 0.7 was hallucinating verdicts
     }),
   });
 

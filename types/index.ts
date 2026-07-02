@@ -3,16 +3,12 @@ export type PolicyType = "flyover" | "hospital" | "drainage" | "school" | "park"
 export type SimulationStatus = "idle" | "loading" | "complete" | "error";
 
 export type MapLayer =
-  | "zones"
-  | "roads"
   | "hospitals"
   | "schools"
   | "buildings"
   | "traffic"
   | "heatmap"
-  | "proposed"
-  | "fires"
-  | "surface-temp";
+  | "proposed";
 
 export type GeoJSONPosition = [number, number] | [number, number, number];
 
@@ -89,7 +85,7 @@ export interface SimulationResponse {
     after: CitySimulationMetrics;
   };
   processing_time_ms: number;
-  /** True when results come from client-side LAHORE_SCENARIOS fallback */
+  // mock flag — set when python sim is down
   _isMock?: boolean;
 }
 
@@ -135,7 +131,7 @@ export interface InfrastructureNode {
   type: "hospital" | "school" | "fire_station" | "police";
   lat: number;
   lng: number;
-  metadata: any;
+  metadata: Record<string, unknown>;
 }
 
 export interface BuildingFeature {

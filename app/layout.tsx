@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import "./globals.css";
+import './globals.css'; // geist + dossier tokens live here
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -14,11 +14,11 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "UrbanIQ — Urban Policy Simulation",
-  description:
-    "Simulate infrastructure policies on a digital twin of Lahore before spending billions",
+  title: "UrbanIQ — Lahore policy sim",
+  description: "simulate infrastructure on lahore's digital twin before spending billions",
 };
 
+// TODO: add og:image before we share this publicly
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} bg-navy text-slate-100 antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} bg-bg-primary text-slate-100 antialiased`}
       >
         {children}
       </body>

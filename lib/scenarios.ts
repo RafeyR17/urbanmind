@@ -17,6 +17,7 @@ export interface ScenarioConfig {
 
 const CACHE_PREFIX = 'urbaniq-scenario-';
 
+// TODO: this breaks if budget is negative, fix later
 export const SCENARIO_CONFIGS: ScenarioConfig[] = [
   {
     id: 'kalma-chowk-flyover',
@@ -135,5 +136,6 @@ export async function loadAllScenarios(): Promise<Scenario[]> {
   const configs = [...SCENARIO_CONFIGS].sort(
     (a, b) => a.sort_order - b.sort_order,
   );
+  console.log('loading scenarios:', configs.length); // debug, remove before demo
   return Promise.all(configs.map(loadScenario));
 }

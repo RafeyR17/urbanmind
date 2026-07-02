@@ -3,16 +3,9 @@ import type { Color, PickingInfo } from '@deck.gl/core';
 import type { MjolnirEvent } from 'mjolnir.js';
 import type { BuildingFeature } from '@/types';
 
-export type BuildingHighlightCategory =
-  | 'hospital'
-  | 'school'
-  | 'both'
-  | 'all'
-  | null;
-
 export interface BuildingLayerProps {
   data: BuildingFeature[];
-  highlightCategory?: BuildingHighlightCategory;
+  mapZoom: number;
   onHover?: (
     info: PickingInfo<BuildingFeature>,
     event: MjolnirEvent,
@@ -20,97 +13,42 @@ export interface BuildingLayerProps {
   onClick?: (building: BuildingFeature) => void;
 }
 
-function getFillColor(
-  building: BuildingFeature,
-  highlightCategory: BuildingHighlightCategory,
-): Color {
-  if (highlightCategory === 'hospital') {
-    if (building.category === 'hospital') return [220, 38, 38, 240];
-    return [15, 23, 42, 40];
-  }
-
-  if (highlightCategory === 'school') {
-    if (building.category === 'school') return [37, 99, 235, 240];
-    return [15, 23, 42, 40];
-  }
-
-  if (highlightCategory === 'both') {
-    if (building.category === 'hospital') return [220, 38, 38, 240];
-    if (building.category === 'school') return [37, 99, 235, 240];
-    return [15, 23, 42, 40];
-  }
-
-  if (building.category === 'hospital') return [220, 38, 38, 240];
-  if (building.category === 'school') return [37, 99, 235, 240];
-  return [15, 23, 42, 200];
-}
-
-function getLineColor(
-  building: BuildingFeature,
-  highlightCategory: BuildingHighlightCategory,
-): Color {
-  if (highlightCategory === 'hospital') {
-    if (building.category === 'hospital') return [255, 100, 100, 200];
-    return [0, 212, 255, 10];
-  }
-
-  if (highlightCategory === 'school') {
-    if (building.category === 'school') return [100, 150, 255, 200];
-    return [0, 212, 255, 10];
-  }
-
-  if (highlightCategory === 'both') {
-    if (building.category === 'hospital') return [255, 100, 100, 200];
-    if (building.category === 'school') return [100, 150, 255, 200];
-    return [0, 212, 255, 10];
-  }
-
-  if (building.category === 'hospital') return [255, 100, 100, 200];
-  if (building.category === 'school') return [100, 150, 255, 200];
-  return [0, 212, 255, 30];
-}
+const FILL_COLOR: Color = [12, 20, 40, 255];
+const LINE_COLOR: Color = [0, 212, 255, 8];
 
 export function createBuildingLayer({
   data,
-  highlightCategory = null,
+  mapZoom,
   onHover,
   onClick,
 }: BuildingLayerProps) {
-  const categoryFilter =
-    highlightCategory === 'hospital' ||
-    highlightCategory === 'school' ||
-    highlightCategory === 'both'
-      ? highlightCategory
-      : highlightCategory === 'all'
-        ? 'all'
-        : null;
+  if (mapZoom < 11) return null;
+
+  const tempData = data;
 
   return new PolygonLayer<BuildingFeature>({
     id: 'buildings',
-    data,
+    data: tempData,
     getPolygon: (building) => building.polygon,
     extruded: true,
     wireframe: false,
-    getElevation: (building) => building.height,
-    getFillColor: (building) => getFillColor(building, categoryFilter),
-    getLineColor: (building) => getLineColor(building, categoryFilter),
-    lineWidthMinPixels: 1,
+    getElevation: (building) => building.height * 0.6, // 0.6 from testing, tweak if buildings look too flat
+    getFillColor: FILL_COLOR,
+    getLineColor: LINE_COLOR,
+    lineWidthMinPixels: 0.2,
     material: {
-      ambient: 0.3,
-      diffuse: 0.8,
-      shininess: 64,
-      specularColor: [255, 255, 255],
+      ambient: 0.2,
+      diffuse: 0.6,
+      shininess: 32,
+      specularColor: [0, 212, 255],
     },
     pickable: true,
     autoHighlight: true,
-    highlightColor: [255, 255, 255, 80],
-    updateTriggers: {
-      getFillColor: categoryFilter,
-      getLineColor: categoryFilter,
-    },
+    highlightColor: [0, 212, 255, 40],
     onHover,
     onClick: (info) => {
       if (info.object) {
+        // console.log('building click', info.object.id);
         onClick?.(info.object);
       }
     },

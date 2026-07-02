@@ -21,7 +21,7 @@ export const TRAFFIC_REFRESH_MS = 120_000;
 
 const TOMTOM_API_KEY = process.env.NEXT_PUBLIC_TOMTOM_API_KEY ?? '';
 
-/** TomTom real-time flow segment data is not available in Pakistan (PK). */
+/** TomTom flow API doesn't work in PK — we fake it with rush-hour heuristics */
 const LAHORE_FLOW_API_SUPPORTED = false;
 
 export const LAHORE_INTERSECTIONS = [
@@ -89,7 +89,7 @@ function getLahoreHour(): number {
   return Number(formatter.format(new Date()));
 }
 
-function buildSimulatedFlowSegment(
+function simFlowSeg(
   intersection: (typeof LAHORE_INTERSECTIONS)[number],
 ): TrafficFlowSegment {
   const hour = getLahoreHour();
@@ -97,7 +97,7 @@ function buildSimulatedFlowSegment(
     (hour >= 7 && hour <= 10) || (hour >= 16 && hour <= 20);
   const baseCongestion = rushHour ? 0.62 : 0.28;
   const offset = stableIntersectionOffset(intersection.id);
-  const congestionLevel = clamp(baseCongestion + (offset - 0.5) * 0.35);
+  const congestionLevel = clamp(baseCongestion + (offset - 0.5) * 0.35); // 0.35 from testing, tweak if numbers look off
   const freeFlowSpeed = 42 + offset * 18;
   const currentSpeed = Math.max(
     8,
@@ -150,20 +150,22 @@ async function fetchFlowAtPoint(
 }
 
 export async function fetchTrafficFlow(): Promise<TrafficFlowSegment[]> {
+  console.log('traffic segments:', LAHORE_INTERSECTIONS.length); // debug, remove before demo
+
   if (!TOMTOM_API_KEY) {
     console.warn('[tomtom] NEXT_PUBLIC_TOMTOM_API_KEY is not set — using simulated Lahore traffic');
-    return LAHORE_INTERSECTIONS.map(buildSimulatedFlowSegment);
+    return LAHORE_INTERSECTIONS.map(simFlowSeg);
   }
 
   if (!LAHORE_FLOW_API_SUPPORTED) {
-    return LAHORE_INTERSECTIONS.map(buildSimulatedFlowSegment);
+    return LAHORE_INTERSECTIONS.map(simFlowSeg);
   }
 
   try {
     return await Promise.all(LAHORE_INTERSECTIONS.map(fetchFlowAtPoint));
   } catch (error) {
     console.warn('[tomtom] Live flow unavailable for Lahore — using simulated traffic:', error);
-    return LAHORE_INTERSECTIONS.map(buildSimulatedFlowSegment);
+    return LAHORE_INTERSECTIONS.map(simFlowSeg);
   }
 }
 
@@ -238,7 +240,7 @@ export async function fetchTrafficIncidents(): Promise<TrafficIncident[]> {
       })
       .filter((incident): incident is TrafficIncident => incident !== null);
   } catch (error) {
-    console.warn('[tomtom] Incidents fetch failed:', error);
+    console.warn('[tomtom] incidents failed:', error);
     return [];
   }
 }

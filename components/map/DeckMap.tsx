@@ -50,30 +50,62 @@ const TOMTOM_API_KEY = process.env.NEXT_PUBLIC_TOMTOM_API_KEY ?? '';
 const PRIMARY_MAP_STYLE = getPrimaryMapStyleUrl();
 const STADIA_FALLBACK_STYLE = getStadiaFallbackStyleUrl();
 
-function setMapLabelsVisible(map: MapLibreMap, visible: boolean) {
-  const apply = () => {
-    const layers = map.getStyle()?.layers ?? [];
-    for (const layer of layers) {
-      if (layer.type !== 'symbol') continue;
-      if (!layer.layout || !('text-field' in layer.layout)) continue;
-      try {
-        map.setLayoutProperty(
-          layer.id,
-          'visibility',
-          visible ? 'visible' : 'none',
-        );
-      } catch {
-        // Some symbol layers cannot be toggled
-      }
+function trySetLayout(
+  map: MapLibreMap,
+  layerId: string,
+  property: string,
+  value: string,
+) {
+  try {
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, property, value);
     }
-  };
+  } catch {
+    // layer might not exist in this style, whatever
+  }
+}
 
-  if (!map.isStyleLoaded()) {
-    map.once('styledata', apply);
-    return;
+function trySetPaint(
+  map: MapLibreMap,
+  layerId: string,
+  property: string,
+  value: string,
+) {
+  try {
+    if (map.getLayer(layerId)) {
+      map.setPaintProperty(layerId, property, value);
+    }
+  } catch {
+    // layer might not exist in this style, whatever
+  }
+}
+
+/** strip base map so particles pop */
+export function applyMinimalMapStyle(map: MapLibreMap) {
+  const hideLabels = [
+    'country-label',
+    'state-label',
+    'settlement-minor-label',
+    'settlement-major-label',
+    'poi-label',
+    'airport-label',
+    'road-label',
+    'waterway-label',
+  ];
+
+  for (const layerId of hideLabels) {
+    trySetLayout(map, layerId, 'visibility', 'none');
   }
 
-  apply();
+  trySetPaint(map, 'road-primary', 'line-color', '#1a2035');
+  trySetPaint(map, 'road-secondary-tertiary', 'line-color', '#141824');
+  trySetPaint(map, 'road-street', 'line-color', '#0f1520');
+  trySetPaint(map, 'road-motorway-trunk', 'line-color', '#1e2d45');
+  trySetPaint(map, 'water', 'fill-color', '#070d1a');
+  trySetPaint(map, 'land', 'background-color', '#080e1c');
+
+  trySetLayout(map, 'road-motorway-trunk-label', 'visibility', 'visible');
+  trySetPaint(map, 'road-motorway-trunk-label', 'text-color', '#1e3a5f');
 }
 
 const INITIAL_VIEW_STATE = {
@@ -138,14 +170,14 @@ export interface DeckMapProps {
   isDrawingMode: boolean;
   activeTileLayer?: WeatherTileLayer;
   showTerrain?: boolean;
-  showLabels?: boolean;
   showTrafficTiles?: boolean;
   showIncidentTiles?: boolean;
   showFires?: boolean;
   showSurfaceTemp?: boolean;
-  /** When set, map is fully controlled externally (comparison sync mode) */
   externalViewState?: UrbanIQViewState;
   onViewStateChange?: (viewState: UrbanIQViewState) => void;
+  onMapHandle?: (handle: DeckMapHandle | null) => void;
+  onZoomChange?: (zoom: number) => void;
 }
 
 export interface DeckMapHandle {
@@ -160,13 +192,14 @@ function DeckMap(
     isDrawingMode,
     activeTileLayer = 'none',
     showTerrain = false,
-    showLabels = true,
     showTrafficTiles = true,
     showIncidentTiles = false,
     showFires = false,
     showSurfaceTemp = false,
     externalViewState,
     onViewStateChange,
+    onMapHandle,
+    onZoomChange,
   },
   ref,
 ) {
@@ -175,7 +208,6 @@ function DeckMap(
   const [mapProvider, setMapProvider] = useState<MapProvider>(getMapProvider());
   const [internalViewState, setInternalViewState] =
     useState<UrbanIQViewState>(INITIAL_VIEW_STATE);
-  // Use external viewState when provided (comparison sync mode), otherwise use internal
   const viewState = externalViewState ?? internalViewState;
   const setViewState = useCallback((updater: UrbanIQViewState | ((prev: UrbanIQViewState) => UrbanIQViewState)) => {
     const next = typeof updater === 'function' ? updater(viewState) : updater;
@@ -199,10 +231,9 @@ function DeckMap(
       try {
         const response = await fetch(`/api/weather?tile=${activeTileLayer}`);
         if (!response.ok) throw new Error('Failed to load weather tile URL');
-        const data = (await response.json()) as { template: string | null };
-        if (!cancelled) setWeatherTileUrl(data.template);
-      } catch (error) {
-        console.error('[DeckMap] Failed to load weather tiles:', error);
+        const tempData = (await response.json()) as { template: string | null };
+        if (!cancelled) setWeatherTileUrl(tempData.template);
+      } catch {
         if (!cancelled) setWeatherTileUrl(null);
       }
     }
@@ -217,8 +248,16 @@ function DeckMap(
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    setMapLabelsVisible(map, showLabels);
-  }, [showLabels]);
+
+    const apply = () => applyMinimalMapStyle(map);
+
+    if (!map.isStyleLoaded()) {
+      map.once('styledata', apply);
+      return;
+    }
+
+    apply();
+  }, [mapStyle]);
 
   const flyToLocation = useCallback((location: FlyToLocationOptions) => {
     setViewState((current) => ({
@@ -228,13 +267,19 @@ function DeckMap(
       zoom: location.zoom ?? current.zoom,
       pitch: location.pitch ?? current.pitch,
       bearing: location.bearing ?? current.bearing,
-      transitionDuration: 1500,
+      transitionDuration: 1500, // fly-to duration ms
       transitionInterpolator: new FlyToInterpolator({ speed: 1.5 }),
       transitionEasing: (t: number) => t * (2 - t),
     }));
   }, [setViewState]);
 
   useImperativeHandle(ref, () => ({ flyToLocation }), [flyToLocation]);
+
+  useEffect(() => {
+    if (!onMapHandle) return;
+    onMapHandle({ flyToLocation });
+    return () => onMapHandle(null);
+  }, [onMapHandle, flyToLocation]);
 
   const handleMapClick = useCallback(
     (event: MapMouseEvent) => {
@@ -272,20 +317,24 @@ function DeckMap(
         mapStyle={mapStyle}
         initialViewState={INITIAL_VIEW_STATE}
         {...viewState}
-        onLoad={(event) => setMapLabelsVisible(event.target, showLabels)}
+        onLoad={(event) => {
+          applyMinimalMapStyle(event.target);
+          console.log('deck map style loaded');
+        }}
         onError={handleMapError}
         minZoom={9}
         maxZoom={18}
         maxBounds={LAHORE_MAX_BOUNDS}
-        onMove={(event) =>
+        onMove={(event) => {
           setViewState({
             longitude: event.viewState.longitude,
             latitude: event.viewState.latitude,
             zoom: event.viewState.zoom,
             pitch: event.viewState.pitch,
             bearing: event.viewState.bearing,
-          })
-        }
+          });
+          onZoomChange?.(event.viewState.zoom);
+        }}
         style={{ width: '100vw', height: '100vh' }}
         reuseMaps
         cursor={isDrawingMode ? 'crosshair' : 'grab'}
@@ -412,11 +461,11 @@ function DeckMap(
             lineHeight: 1.5,
           }}
         >
-          <div className="font-medium text-slate-200">Road traffic</div>
+          <div className="font-medium text-slate-200">Live traffic particles</div>
           <div className="flex items-center gap-2">
-            <span style={{ color: '#10b981' }}>●</span> Free
-            <span style={{ color: '#f59e0b' }}>●</span> Slow
-            <span style={{ color: '#ef4444' }}>●</span> Heavy
+            <span style={{ color: '#c8e6ff' }}>●</span> Clear
+            <span style={{ color: 'var(--accent-warning)' }}>●</span> Moderate
+            <span style={{ color: 'var(--alert-danger)' }}>●</span> Congested
           </div>
         </div>
       ) : null}
@@ -438,9 +487,9 @@ function DeckMap(
           className="glass pointer-events-none absolute inset-x-0 top-16 z-10 mx-auto max-w-md rounded-xl px-4 py-3 text-center text-sm text-secondary"
           role="alert"
         >
-          Add a map API key to <code className="text-cyan">.env.local</code> as{' '}
-          <code className="text-cyan">NEXT_PUBLIC_MAPTILER_KEY</code> or{' '}
-          <code className="text-cyan">NEXT_PUBLIC_STADIA_API_KEY</code>
+          Add a map API key to <code className="text-accent-warning">.env.local</code> as{' '}
+          <code className="text-accent-warning">NEXT_PUBLIC_MAPTILER_KEY</code> or{' '}
+          <code className="text-accent-warning">NEXT_PUBLIC_STADIA_API_KEY</code>
         </div>
       ) : null}
     </div>

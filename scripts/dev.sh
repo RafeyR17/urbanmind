@@ -20,7 +20,7 @@ fi
 pkill -f "${ROOT}/node_modules/.bin/next dev" 2>/dev/null || true
 sleep 1
 
-echo "[dev] Clearing .next build cache..."
+echo "[dev] Clearing .next build cache..."  # external drive + next = pain
 rm -rf .next
 
 echo "[dev] Starting Next.js on http://localhost:${PORT}"

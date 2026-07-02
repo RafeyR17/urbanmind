@@ -1,7 +1,29 @@
 import type { BuildingFeature, InfrastructureNode } from '@/types';
+import { FALLBACK_ROADS } from '@/lib/lahoreFallbackRoads';
+
+export interface RoadFeatureCollection {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    geometry: {
+      type: 'LineString';
+      coordinates: [number, number][];
+    };
+    properties: {
+      highway: string;
+      name: string;
+      ref: string;
+    };
+  }>;
+}
 
 const OVERPASS_PROXY_URL = '/api/overpass';
-const OVERPASS_DIRECT_URL = 'https://overpass-api.de/api/interpreter';
+const BUILDINGS_CACHE_KEY = 'urbaniq:buildings:v1';
+const ROADS_CACHE_KEY = 'urbaniq:roads:v1';
+const BUILDINGS_CACHE_TTL_MS = 15 * 60 * 1000;
+const ROADS_CACHE_TTL_MS = 60 * 60 * 1000;
+const PROXY_TIMEOUT_MS = 24_000;
+const MAX_ROAD_FEATURES = 600; // had to cap this bc deck.gl was dying with full lahore
 
 interface OverpassNode {
   type: 'node';
@@ -48,30 +70,196 @@ const FALLBACK_INFRASTRUCTURE: InfrastructureNode[] = [
   { id: 's8', name: 'Beaconhouse School', type: 'school', lat: 31.5234, lng: 74.3634, metadata: {} },
 ];
 
-function buildHospitalsQuery(): string {
+let roadsCache: RoadFeatureCollection | null = null;
+
+function buildLahoreRoadsQuery(): string {
   return `
-    [out:json][timeout:30];
+    [out:json][timeout:25];
     (
-      node["amenity"="hospital"](31.38,74.15,31.65,74.55);
-      way["amenity"="hospital"](31.38,74.15,31.65,74.55);
+      way["highway"~"motorway|trunk|primary|secondary"](31.45,74.25,31.58,74.45);
     );
-    out center;
+    out geom;
   `;
 }
 
-function buildSchoolsQuery(): string {
-  return `
-    [out:json][timeout:30];
-    (
-      node["amenity"="school"](31.38,74.15,31.65,74.55);
-      node["amenity"="college"](31.38,74.15,31.65,74.55);
-      node["amenity"="university"](31.38,74.15,31.65,74.55);
-      way["amenity"="school"](31.38,74.15,31.65,74.55);
-      way["amenity"="college"](31.38,74.15,31.65,74.55);
-      way["amenity"="university"](31.38,74.15,31.65,74.55);
+function roadPriority(highway: string): number {
+  if (highway === 'motorway' || highway === 'trunk') return 0;
+  if (highway === 'primary') return 1;
+  if (highway === 'secondary') return 2;
+  return 3;
+}
+
+function capRoadFeatures(
+  features: RoadFeatureCollection['features'],
+): RoadFeatureCollection['features'] {
+  if (features.length <= MAX_ROAD_FEATURES) return features;
+  return [...features]
+    .sort(
+      (a, b) =>
+        roadPriority(a.properties.highway) -
+        roadPriority(b.properties.highway),
+    )
+    .slice(0, MAX_ROAD_FEATURES);
+}
+
+function readRoadsCache(): RoadFeatureCollection | null {
+  if (typeof sessionStorage === 'undefined') return null;
+
+  try {
+    const raw = sessionStorage.getItem(ROADS_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as {
+      ts: number;
+      data: RoadFeatureCollection;
+    };
+    if (Date.now() - parsed.ts > ROADS_CACHE_TTL_MS) return null;
+    return parsed.data;
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+}
+
+function writeRoadsCache(roads: RoadFeatureCollection): void {
+  if (typeof sessionStorage === 'undefined') return;
+
+  try {
+    sessionStorage.setItem(
+      ROADS_CACHE_KEY,
+      JSON.stringify({ ts: Date.now(), data: roads }),
     );
-    out center;
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+export function getInitialRoads(): RoadFeatureCollection {
+  return FALLBACK_ROADS;
+}
+
+export { FALLBACK_ROADS };
+
+function mapWayToRoadFeature(
+  way: OverpassWay,
+): RoadFeatureCollection['features'][number] | null {
+  const geometry = way.geometry ?? [];
+  if (geometry.length < 2) return null;
+
+  return {
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: geometry.map((point) => [point.lon, point.lat]),
+    },
+    properties: {
+      highway: way.tags?.highway ?? '',
+      name: way.tags?.name ?? '',
+      ref: way.tags?.ref ?? '',
+    },
+  };
+}
+
+export async function fetchRoads(): Promise<RoadFeatureCollection> {
+  if (roadsCache) {
+    console.info('[roads] cached');
+    return roadsCache;
+  }
+
+  const sessionCached = readRoadsCache();
+  if (sessionCached?.features.length) {
+    console.info('[roads] Using session-cached OSM roads');
+    roadsCache = sessionCached;
+    return sessionCached;
+  }
+
+  try {
+    const response = await postOverpassQuery(buildLahoreRoadsQuery());
+    const arr = response.elements ?? [];
+    const features: RoadFeatureCollection['features'] = [];
+
+    for (const element of arr) {
+      if (element.type !== 'way') continue;
+      const feature = mapWayToRoadFeature(element);
+      if (feature) features.push(feature);
+    }
+
+    if (features.length === 0) {
+      console.warn('[roads] overpass empty — fallback corridors');
+      roadsCache = FALLBACK_ROADS;
+      return FALLBACK_ROADS;
+    }
+
+    const capped = capRoadFeatures(features);
+    roadsCache = { type: 'FeatureCollection', features: capped };
+    writeRoadsCache(roadsCache);
+    console.log('[roads] loaded', capped.length, 'segments'); // debug, remove before demo
+    return roadsCache;
+  } catch (error) {
+    console.warn('[roads] fetch failed:', error);
+    roadsCache = FALLBACK_ROADS;
+    return FALLBACK_ROADS;
+  }
+}
+
+function buildLahoreBuildingsQuery(): string {
+  return `
+    [out:json][timeout:25];
+    (
+      node["amenity"="hospital"](31.44,74.25,31.58,74.45);
+      way["amenity"="hospital"](31.44,74.25,31.58,74.45);
+      node["amenity"~"^(school|college|university)$"](31.44,74.25,31.58,74.45);
+      way["amenity"~"^(school|college|university)$"](31.44,74.25,31.58,74.45);
+      way["building"~"^(school|college|university)$"](31.44,74.25,31.58,74.45);
+      way["building:use"~"^(education|school)$"](31.44,74.25,31.58,74.45);
+    );
+    out body geom;
   `;
+}
+
+function readBuildingsCache(): BuildingFeature[] | null {
+  if (typeof sessionStorage === 'undefined') return null;
+
+  try {
+    const raw = sessionStorage.getItem(BUILDINGS_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as { ts: number; data: BuildingFeature[] };
+    if (Date.now() - parsed.ts > BUILDINGS_CACHE_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeBuildingsCache(buildings: BuildingFeature[]): void {
+  if (typeof sessionStorage === 'undefined') return;
+
+  try {
+    sessionStorage.setItem(
+      BUILDINGS_CACHE_KEY,
+      JSON.stringify({ ts: Date.now(), data: buildings }),
+    );
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+function amenityToCategory(
+  amenity: string | undefined,
+): 'hospital' | 'school' | null {
+  if (!amenity) return null;
+  const lower = amenity.toLowerCase();
+  if (lower === 'hospital') return 'hospital';
+  if (
+    lower === 'school' ||
+    lower === 'college' ||
+    lower === 'university' ||
+    lower === 'education'
+  ) {
+    return 'school';
+  }
+  return null;
 }
 
 function createFootprintFromPoint(
@@ -143,14 +331,19 @@ function mapInfrastructureElementToBuilding(
   };
 }
 
-function mapInfrastructureElements(
-  elements: Array<OverpassNode | OverpassWay>,
-  category: 'hospital' | 'school',
-): BuildingFeature[] {
-  return elements
-    .filter((element) => element.type === 'node' || element.type === 'way')
-    .map((element) => mapInfrastructureElementToBuilding(element, category))
-    .filter((building): building is BuildingFeature => building !== null);
+function mapElementToBuilding(
+  element: OverpassNode | OverpassWay,
+): BuildingFeature | null {
+  const category = amenityToCategory(element.tags?.amenity);
+  if (!category) return null;
+
+  if (element.type === 'way' && element.geometry?.length) {
+    const building = mapWayToTypedBuilding(element);
+    if (!building) return null;
+    return { ...building, category };
+  }
+
+  return mapInfrastructureElementToBuilding(element, category);
 }
 
 const FALLBACK_BUILDINGS: BuildingFeature[] = [
@@ -305,7 +498,8 @@ function resolveCategory(
   if (
     combined.includes('school') ||
     combined.includes('university') ||
-    combined.includes('college')
+    combined.includes('college') ||
+    combined.includes('education')
   ) {
     return 'school';
   }
@@ -342,18 +536,6 @@ function mapWayToTypedBuilding(way: OverpassWay): BuildingFeature | null {
     type,
     category,
   };
-}
-
-function buildAmenityBuildingsQuery(): string {
-  return `
-    [out:json][timeout:30];
-    (
-      way["building"]["amenity"="hospital"](31.44,74.25,31.60,74.45);
-      way["building"]["amenity"="school"](31.44,74.25,31.60,74.45);
-      way["building"]["amenity"="university"](31.44,74.25,31.60,74.45);
-    );
-    out geom;
-  `;
 }
 
 function dedupeBuildings(buildings: BuildingFeature[]): BuildingFeature[] {
@@ -413,61 +595,45 @@ function supplementCategory(
   return dedupeBuildings([...inCategory, ...extras, ...others]);
 }
 
-function mergeCategoryBuildings(
-  pointFootprints: BuildingFeature[],
-  geomFootprints: BuildingFeature[],
-  category: 'hospital' | 'school',
-): BuildingFeature[] {
-  const geom = geomFootprints.filter((b) => b.category === category);
-  const points = pointFootprints.filter((b) => b.category === category);
-  // Prefer real OSM polygon footprints, fill gaps with node footprints
-  return dedupeBuildings([...geom, ...points]);
+export function getInitialBuildings(): BuildingFeature[] {
+  return FALLBACK_BUILDINGS;
 }
 
 export async function fetchBuildingsWithType(): Promise<BuildingFeature[]> {
+  const cached = readBuildingsCache();
+  if (cached?.length) {
+    console.info(`[buildings] Using cached OSM data (${cached.length} footprints)`);
+    return cached;
+  }
+
   try {
-    const [hospitalResult, schoolResult, geomResult] = await Promise.allSettled([
-      postOverpassQuery(buildHospitalsQuery()),
-      postOverpassQuery(buildSchoolsQuery()),
-      postOverpassQuery(buildAmenityBuildingsQuery()),
-    ]);
+    const response = await postOverpassQuery(buildLahoreBuildingsQuery());
+    const elements = response.elements ?? [];
 
-    const hospitalPoints =
-      hospitalResult.status === 'fulfilled'
-        ? mapInfrastructureElements(hospitalResult.value.elements ?? [], 'hospital')
-        : [];
-    const schoolPoints =
-      schoolResult.status === 'fulfilled'
-        ? mapInfrastructureElements(schoolResult.value.elements ?? [], 'school')
-        : [];
-    const geomBuildings =
-      geomResult.status === 'fulfilled'
-        ? (geomResult.value.elements ?? [])
-            .filter(isOverpassWay)
-            .map(mapWayToTypedBuilding)
-            .filter((building): building is BuildingFeature => building !== null)
-        : [];
+    const hospitals: BuildingFeature[] = [];
+    const schools: BuildingFeature[] = [];
 
-    if (hospitalResult.status === 'rejected') {
-      console.warn('[buildings] Hospital fetch failed:', hospitalResult.reason);
+    for (const element of elements) {
+      if (element.type !== 'node' && element.type !== 'way') continue;
+      const building = mapElementToBuilding(element);
+      if (!building) continue;
+      if (building.category === 'hospital') hospitals.push(building);
+      if (building.category === 'school') schools.push(building);
     }
-    if (schoolResult.status === 'rejected') {
-      console.warn('[buildings] School fetch failed:', schoolResult.reason);
-    }
-    if (geomResult.status === 'rejected') {
-      console.warn('[buildings] Geom footprint fetch failed:', geomResult.reason);
-    }
-
-    const hospitals = mergeCategoryBuildings(hospitalPoints, geomBuildings, 'hospital');
-    const schools = mergeCategoryBuildings(schoolPoints, geomBuildings, 'school');
 
     if (hospitals.length === 0 && schools.length === 0) {
+      console.warn('[buildings] Overpass returned no buildings — using fallback');
       return FALLBACK_BUILDINGS;
     }
 
-    let buildings = [...hospitals, ...schools];
-    buildings = supplementCategory(buildings, 'hospital', 50);
+    let buildings = dedupeBuildings([...hospitals, ...schools]);
+    buildings = supplementCategory(buildings, 'hospital', 50); // min hospitals for map
     buildings = supplementCategory(buildings, 'school', 50);
+
+    console.info(
+      `[buildings] Loaded ${buildings.length} footprints (${hospitals.length} hospitals, ${schools.length} schools)`,
+    );
+    writeBuildingsCache(buildings);
     return buildings;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -476,51 +642,44 @@ export async function fetchBuildingsWithType(): Promise<BuildingFeature[]> {
   }
 }
 
+const inflightQueries = new Map<string, Promise<OverpassResponse>>();
+
 async function postOverpassQuery(query: string): Promise<OverpassResponse> {
-  const body = `data=${encodeURIComponent(query)}`;
-  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  const key = query.trim();
+  const inflight = inflightQueries.get(key);
+  if (inflight) return inflight;
 
-  try {
-    const proxyResponse = await fetch(OVERPASS_PROXY_URL, {
-      method: 'POST',
-      headers,
-      body,
-    });
-
-    const proxyData = await proxyResponse.json() as OverpassResponse & { error?: string };
-
-    if (proxyResponse.ok && !proxyData.error) {
-      return proxyData;
-    }
-
-    const proxyError = proxyData.error
-      ?? `Proxy error: ${proxyResponse.status} ${proxyResponse.statusText}`;
-    throw new Error(proxyError);
-  } catch (proxyError) {
-    const message = proxyError instanceof Error ? proxyError.message : String(proxyError);
-    console.warn('[overpass] proxy failed, trying direct fallback:', message);
-  }
-
-  const directResponse = await fetch(OVERPASS_DIRECT_URL, {
-    method: 'POST',
-    headers: {
-      ...headers,
-      'User-Agent': 'UrbanIQ/1.0 (hackathon project)',
-    },
-    body,
-    signal: AbortSignal.timeout(35000),
+  const promise = postOverpassQueryOnce(query).finally(() => {
+    inflightQueries.delete(key);
   });
-
-  if (!directResponse.ok) {
-    const errorText = await directResponse.text();
-    throw new Error(
-      `Overpass direct error: ${directResponse.status} ${directResponse.statusText} - ${errorText}`,
-    );
-  }
-
-  return directResponse.json() as Promise<OverpassResponse>;
+  inflightQueries.set(key, promise);
+  return promise;
 }
 
-function isOverpassWay(element: OverpassNode | OverpassWay): element is OverpassWay {
-  return element.type === 'way';
+async function postOverpassQueryOnce(query: string): Promise<OverpassResponse> {
+  const body = `data=${encodeURIComponent(query)}`;
+  const headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    Accept: 'application/json',
+  };
+
+  const proxyResponse = await fetch(OVERPASS_PROXY_URL, {
+    method: 'POST',
+    headers,
+    body,
+    signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+  });
+
+  const proxyData = (await proxyResponse.json()) as OverpassResponse & {
+    error?: string;
+  };
+
+  if (proxyResponse.ok && !proxyData.error) {
+    return proxyData;
+  }
+
+  const proxyError =
+    proxyData.error ??
+    `Proxy error: ${proxyResponse.status} ${proxyResponse.statusText}`;
+  throw new Error(proxyError);
 }

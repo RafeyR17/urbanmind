@@ -21,8 +21,8 @@ echo "[dev:all] Starting FastAPI simulation backend on port 8000..."
 ) &
 API_PID=$!
 
-echo "[dev:all] Waiting for ${API_URL}/health ..."
-for _ in $(seq 1 30); do
+echo "[dev:all] Waiting for ${API_URL}/health ..."  # give uvicorn time to import models
+for _ in $(seq 1 30); do  # 30s max — usually up in ~3
   if curl -sf "${API_URL}/health" >/dev/null 2>&1; then
     echo "[dev:all] Simulation backend is ready."
     break

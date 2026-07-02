@@ -1,13 +1,13 @@
 'use client';
 
-import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CameraFlyTo,
   Entity,
   Viewer,
   type CesiumComponentRef,
 } from 'resium';
+import 'cesium/Build/Cesium/Widgets/widgets.css';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cartesian3,
   Color,
@@ -20,16 +20,10 @@ import {
   type TerrainProvider,
 } from 'cesium';
 import type {
-  DistrictZone,
   BuildingFeature,
   GeoJSONPolygonGeometry,
-  GeoJSONPosition,
   SimulationResponse,
 } from '@/types';
-import {
-  getZoneElevation,
-  getZoneRgba,
-} from '@/lib/zoneImpact';
 
 if (typeof window !== 'undefined') {
   window.CESIUM_BASE_URL = '/cesium';
@@ -43,34 +37,17 @@ if (ION_TOKEN) {
 const LAHORE_CENTER = { lng: 74.3587, lat: 31.5204 };
 
 export interface CesiumMapProps {
-  zones: DistrictZone[];
   buildings: BuildingFeature[];
   simulationResult: SimulationResponse | null;
   cameraFlyKey?: number;
   onReady?: () => void;
 }
 
-function getFirstPolygonRing(
-  polygon: GeoJSONPolygonGeometry,
-): GeoJSONPosition[] {
-  return polygon.type === 'Polygon'
-    ? polygon.coordinates[0]
-    : polygon.coordinates[0][0];
-}
-
-function ringToDegreesArray(ring: GeoJSONPosition[]): number[] {
-  const points =
-    ring.length > 1 &&
-    ring[0][0] === ring[ring.length - 1][0] &&
-    ring[0][1] === ring[ring.length - 1][1]
-      ? ring.slice(0, -1)
-      : ring;
-
-  return points.flatMap((position) => [position[0], position[1]]);
-}
-
 function getPolygonCentroid(polygon: GeoJSONPolygonGeometry): [number, number] {
-  const ring = getFirstPolygonRing(polygon);
+  const ring =
+    polygon.type === 'Polygon'
+      ? polygon.coordinates[0]
+      : polygon.coordinates[0][0];
   const points =
     ring.length > 1 ? ring.slice(0, -1) : ring;
   const [lngTotal, latTotal] = points.reduce(
@@ -88,7 +65,7 @@ function getMostAffectedZone(simulationResult: SimulationResponse) {
     const floodDelta = Math.abs(zone.after.flood_risk - zone.before.flood_risk);
     const emergencyDelta =
       Math.abs(zone.after.emergency_minutes - zone.before.emergency_minutes) *
-      5;
+      5; // emergency minutes weighted heavier, hackathon tuning
     const impact = trafficDelta + floodDelta + emergencyDelta;
 
     if (!mostAffected) return zone;
@@ -112,7 +89,6 @@ function getMostAffectedZone(simulationResult: SimulationResponse) {
 }
 
 export function CesiumMap({
-  zones,
   buildings,
   simulationResult,
   cameraFlyKey = 0,
@@ -133,7 +109,7 @@ export function CesiumMap({
         if (!cancelled) setTerrainProvider(terrain);
       })
       .catch((error) => {
-        console.error('[CesiumMap] Terrain load failed:', error);
+        console.error('[CesiumMap] terrain failed:', error);
       });
 
     return () => {
@@ -156,6 +132,7 @@ export function CesiumMap({
           viewer.scene.primitives.add(osmBuildings);
           osmAddedRef.current = true;
           onReady?.();
+          console.log('cesium osm buildings loaded');
         }
       } catch (error) {
         console.error('[CesiumMap] OSM buildings load failed:', error);
@@ -174,11 +151,11 @@ export function CesiumMap({
 
   const cameraFlight = useMemo(() => {
     if (simulationResult?.affected_zones.length) {
-      const zone = getMostAffectedZone(simulationResult);
-      const [lng, lat] = getPolygonCentroid(zone.polygon);
+      const zoneTmp = getMostAffectedZone(simulationResult);
+      const [lng, lat] = getPolygonCentroid(zoneTmp.polygon);
 
       return {
-        destination: Cartesian3.fromDegrees(lng, lat, 3000),
+        destination: Cartesian3.fromDegrees(lng, lat, 3000), // 3km altitude feels right for zone view
         orientation: {
           heading: 0,
           pitch: CesiumMath.toRadians(-45),
@@ -219,28 +196,6 @@ export function CesiumMap({
     >
       <CameraFlyTo key={cameraFlyKey} {...cameraFlight} once={false} />
 
-      {zones.map((zone) => {
-        const ring = getFirstPolygonRing(zone.polygon);
-        const positions = ringToDegreesArray(ring);
-        const [r, g, b, a] = getZoneRgba(zone, simulationResult);
-
-        return (
-          <Entity
-            key={zone.id}
-            name={zone.name}
-            polygon={{
-              hierarchy: Cartesian3.fromDegreesArray(positions),
-              height: 0,
-              extrudedHeight: getZoneElevation(zone, simulationResult),
-              material: Color.fromBytes(r, g, b, a),
-              outline: true,
-              outlineColor: Color.fromCssColorString('#00d4ff').withAlpha(0.6),
-              outlineWidth: 2,
-            }}
-          />
-        );
-      })}
-
       {hospitals.map((building) => (
         <Entity
           key={building.id}
@@ -251,7 +206,7 @@ export function CesiumMap({
             ),
             height: 0,
             extrudedHeight: building.height,
-            material: Color.fromCssColorString('#ef4444').withAlpha(0.85),
+            material: Color.fromCssColorString('var(--alert-danger)').withAlpha(0.85),
             outline: true,
             outlineColor: Color.WHITE.withAlpha(0.5),
             outlineWidth: 1,

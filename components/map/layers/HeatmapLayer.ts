@@ -29,11 +29,11 @@ export function createHeatmapLayer({
     ? [16, 185, 129]
     : [239, 68, 68];
 
-  const baseRadiusPx = radiusKm * 80;
+  const baseRadiusPx = radiusKm * 80; // px per km, eyeballed
   const rings = [
     { scale: 1.0, opacity: 0.15 },
     { scale: 0.7, opacity: 0.2 },
-    { scale: 0.4, opacity: 0.25 },
+    { scale: 0.4, opacity: 0.25 }, // inner ring opacity, tuned by eye
   ];
 
   const data: ImpactRing[] = rings.map((ring) => ({

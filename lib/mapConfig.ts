@@ -1,6 +1,8 @@
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? '';
 const STADIA_KEY = process.env.NEXT_PUBLIC_STADIA_API_KEY ?? '';
 
+// TODO: support mapbox if someone donates a key
+
 export type MapProvider = 'maptiler' | 'stadia' | 'none';
 
 export function getMapProvider(): MapProvider {
@@ -19,7 +21,7 @@ export function getStadiaStyleUrl(): string | null {
   return `https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key=${STADIA_KEY}`;
 }
 
-/** Prefer MapTiler; Stadia is the runtime fallback when MapTiler fails to load. */
+/** maptiler first, stadia if it 404s at runtime */
 export function getPrimaryMapStyleUrl(): string {
   return getMaptilerStyleUrl() ?? getStadiaStyleUrl() ?? '';
 }
@@ -28,6 +30,9 @@ export function getStadiaFallbackStyleUrl(): string | null {
   if (!MAPTILER_KEY || !STADIA_KEY) return null;
   return getStadiaStyleUrl();
 }
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- leftover from refactor
+const _unusedFallbackRef = getStadiaFallbackStyleUrl;
 
 export function getTerrainTileUrl(provider: MapProvider): string | null {
   if (provider === 'maptiler' && MAPTILER_KEY) {

@@ -32,7 +32,7 @@ const DEMO_SCRIPT: DemoStep[] = [
   {
     type: 'fly_to',
     duration: 2000,
-    payload: { lat: 31.5204, lng: 74.3587, zoom: 13, pitch: 50 },
+    payload: { lat: 31.5204, lng: 74.3587, zoom: 13, pitch: 50 }, // lahore center, pitch 50 looks good on projector
   },
   {
     type: 'narrate',
@@ -87,6 +87,9 @@ const DEMO_SCRIPT: DemoStep[] = [
 const COMPLETE_HOLD_MS = 2000;
 const TOTAL_DEMO_MS =
   DEMO_SCRIPT.reduce((sum, step) => sum + step.duration, 0) + COMPLETE_HOLD_MS;
+
+// old wait impl — rAF based, kept for reference
+// const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface DemoModeProps {
   onRunningChange?: (running: boolean) => void;
@@ -195,14 +198,15 @@ export default function DemoMode({ onRunningChange }: DemoModeProps) {
     setProgress(0);
     setCurrentStep(0);
     onRunningChange?.(true);
+    console.log('demo started, steps:', DEMO_SCRIPT.length);
 
     let elapsedWeight = 0;
 
-    for (let index = 0; index < DEMO_SCRIPT.length; index += 1) {
+    for (let idx = 0; idx < DEMO_SCRIPT.length; idx += 1) {
       if (abortRef.current || runIdRef.current !== runId) return;
 
-      const step = DEMO_SCRIPT[index];
-      setCurrentStep(index + 1);
+      const step = DEMO_SCRIPT[idx];
+      setCurrentStep(idx + 1);
 
       const stepWeight = step.duration / TOTAL_DEMO_MS;
       const stepStartProgress = elapsedWeight / TOTAL_DEMO_MS;
@@ -267,7 +271,7 @@ export default function DemoMode({ onRunningChange }: DemoModeProps) {
       {!isRunning ? (
         <button
           type="button"
-          className="fixed bottom-6 right-6 z-50 flex h-10 items-center gap-2 rounded-full border border-cyan bg-navy/90 px-4 text-sm font-semibold text-cyan shadow-lg shadow-cyan/10 backdrop-blur transition hover:bg-cyan/10"
+          className="fixed bottom-6 right-6 z-50 flex h-10 items-center gap-2 rounded-full border border-accent-warning bg-bg-primary/90 px-4 text-sm font-semibold text-accent-warning shadow-lg shadow-accent-warning/10 backdrop-blur transition hover:bg-accent-warning/10"
           onClick={() => setShowConfirm(true)}
         >
           ▶ Demo
@@ -308,13 +312,13 @@ export default function DemoMode({ onRunningChange }: DemoModeProps) {
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg bg-cyan px-4 py-2 text-sm font-semibold text-navy transition hover:brightness-110"
+                  className="rounded-lg bg-accent-warning px-4 py-2 text-sm font-semibold text-bg-primary transition hover:brightness-110"
                   onClick={() => void runDemo()}
                 >
                   Start
                 </button>
               </div>
-              <p className="mt-3 text-center text-[11px] text-muted">
+              <p className="mt-3 text-center text-[11px] text-text-text-muted">
                 Press <kbd className="rounded border border-white/10 px-1">D</kbd> anytime ·{' '}
                 <kbd className="rounded border border-white/10 px-1">Esc</kbd> to exit
               </p>
@@ -328,14 +332,14 @@ export default function DemoMode({ onRunningChange }: DemoModeProps) {
           <div className="fixed right-4 top-14 z-[56] flex gap-2">
             <button
               type="button"
-              className="rounded-full border border-white/15 bg-navy/90 px-3 py-1.5 text-xs font-semibold text-slate-100 backdrop-blur transition hover:border-cyan/40"
+              className="rounded-full border border-white/15 bg-bg-primary/90 px-3 py-1.5 text-xs font-semibold text-slate-100 backdrop-blur transition hover:border-accent-warning/40"
               onClick={() => setIsPaused((current) => !current)}
             >
               {isPaused ? '▶ Resume' : '⏸ Pause'}
             </button>
             <button
               type="button"
-              className="rounded-full border border-danger/40 bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger backdrop-blur transition hover:bg-danger/20"
+              className="rounded-full border border-alert-danger/40 bg-alert-danger/10 px-3 py-1.5 text-xs font-semibold text-alert-danger backdrop-blur transition hover:bg-alert-danger/20"
               onClick={exitDemo}
             >
               ✕ Exit
@@ -354,7 +358,7 @@ export default function DemoMode({ onRunningChange }: DemoModeProps) {
               <p className="text-lg leading-relaxed text-slate-100">
                 {showComplete ? 'Demo Complete' : narration}
               </p>
-              <p className="mt-2 text-xs uppercase tracking-[0.2em] text-cyan">
+              <p className="mt-2 text-xs uppercase tracking-[0.2em] text-accent-warning">
                 Step {currentStep} / {DEMO_SCRIPT.length}
               </p>
             </motion.div>
@@ -362,7 +366,7 @@ export default function DemoMode({ onRunningChange }: DemoModeProps) {
 
           <div className="fixed bottom-0 left-0 right-0 z-[55] h-1 bg-white/5">
             <motion.div
-              className="h-full bg-cyan shadow-[0_0_12px_rgba(0,212,255,0.6)]"
+              className="h-full bg-accent-warning shadow-[0_0_12px_rgba(0,212,255,0.6)]"
               style={{ width: `${Math.min(progress * 100, 100)}%` }}
             />
           </div>

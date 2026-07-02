@@ -6,7 +6,7 @@ import type {
   ZoneSimulationResult,
 } from "../types";
 
-export const LAHORE_CENTER = { lat: 31.5204, lng: 74.3587 };
+export const LAHORE_CENTER = { lat: 31.5204, lng: 74.3587 }; // kalma chowk area-ish
 
 const createBoundingPolygon = (
   lat: number,
@@ -139,6 +139,8 @@ export const LAHORE_ZONES: DistrictZone[] = [
   },
 ];
 
+console.log('zones:', LAHORE_ZONES.length); // debug, remove before demo
+
 const clamp = (value: number, min = 0, max = 100) =>
   Math.min(max, Math.max(min, value));
 
@@ -182,13 +184,14 @@ const createAffectedZones = (
     }>
   >,
 ) =>
-  LAHORE_ZONES.map((zone) =>
-    createZoneResult(zone, deltasBySlug[zone.slug] ?? {}),
+  LAHORE_ZONES.map((zoneTmp) =>
+    createZoneResult(zoneTmp, deltasBySlug[zoneTmp.slug] ?? {}),
   );
 
 const average = (values: number[]) =>
   values.reduce((total, value) => total + value, 0) / values.length;
 
+// not proud of this economic formula
 const economicScore = (
   trafficScore: number,
   floodRisk: number,

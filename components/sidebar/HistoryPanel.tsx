@@ -24,6 +24,8 @@ function formatBudget(value: number) {
   return `₨${(value / 1_000_000_000).toFixed(1)}B`;
 }
 
+// const formatBudgetOld = (v: number) => `PKR ${v}`;
+
 function formatTimeAgo(dateStr: string) {
   const date = new Date(dateStr);
   const now = new Date();
@@ -49,8 +51,8 @@ export default function HistoryPanel({ appState, setAppState, setActiveTab }: Hi
       .then((data) => {
         if (mounted) setHistory(data);
       })
-      .catch((err) => {
-        console.error('Failed to load history:', err);
+      .catch(() => {
+        // supabase down? history tab just stays empty
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -82,7 +84,7 @@ export default function HistoryPanel({ appState, setAppState, setActiveTab }: Hi
   if (loading) {
     return (
       <div className="flex items-center justify-center py-10">
-        <span className="h-5 w-5 animate-spin rounded-full border-2 border-cyan border-t-transparent" />
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-accent-warning border-t-transparent" />
       </div>
     );
   }
@@ -97,13 +99,13 @@ export default function HistoryPanel({ appState, setAppState, setActiveTab }: Hi
 
   return (
     <div className="space-y-3">
-      {history.map((run, i) => (
+      {history.map((run, idx) => (
         <motion.div
           key={run.id}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: i * 0.05 }}
-          className="cursor-pointer rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan/40 hover:bg-white/[0.05]"
+          transition={{ duration: 0.2, delay: idx * 0.05 }}
+          className="cursor-pointer rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-accent-warning/40 hover:bg-white/[0.05]"
           onClick={() => handleReload(run)}
         >
           <div className="flex items-center justify-between">
@@ -119,7 +121,7 @@ export default function HistoryPanel({ appState, setAppState, setActiveTab }: Hi
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm font-semibold text-cyan">{formatBudget(run.budget_pkr)}</p>
+              <p className="text-sm font-semibold text-accent-warning">{formatBudget(run.budget_pkr)}</p>
               {run.ai_verdict ? (
                 <span className="mt-1 inline-block rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-slate-300">
                   {run.ai_verdict}

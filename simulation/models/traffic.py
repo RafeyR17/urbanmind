@@ -7,6 +7,7 @@ import networkx as nx
 
 ZoneDelta = dict[str, float]
 
+# refactor later if time permits — graph is hand-tuned not from OSM
 ZONE_CENTROIDS: dict[str, tuple[float, float]] = {
     "gulberg": (31.5089, 74.3458),
     "dha": (31.4697, 74.4085),
@@ -143,8 +144,8 @@ class LahoreTrafficModel:
 
     @staticmethod
     def _travel_time(length_km: float, current_load: float) -> float:
-        speed_kmh = 42 * (1 - current_load * 0.55)
-        return length_km / max(speed_kmh, 8) * 60
+        speed_kmh = 42 * (1 - current_load * 0.55)  # 42 = avg lahore speed when moving
+        return length_km / max(speed_kmh, 8) * 60  # floor at 8 km/h — gridlock cap
 
     def _edge_midpoint(self, source: str, target: str) -> tuple[float, float]:
         source_lat, source_lng = self._node_coords(source)
@@ -198,12 +199,12 @@ class LahoreTrafficModel:
         before_time = self._average_travel_time(graph)
         nearby_edges = self._nearby_edges(graph, policy_location, radius_km)
         lanes = float(parameters.get("lanes") or 4)
-        capacity_multiplier = clamp(1.25 + lanes * 0.035, 1.25, 1.40)
+        capacity_multiplier = clamp(1.25 + lanes * 0.035, 1.25, 1.40)  # more lanes = diminishing returns
 
         for source, target in nearby_edges:
             edge = graph[source][target]
             edge["capacity"] = int(edge["capacity"] * capacity_multiplier)
-            edge["current_load"] = clamp(edge["current_load"] * 0.78, 0.20, 1.0)
+            edge["current_load"] = clamp(edge["current_load"] * 0.78, 0.20, 1.0)  # flyover sheds ~22% load
             edge["weight"] = self._travel_time(edge["length_km"], edge["current_load"])
 
         if nearby_edges:
@@ -220,7 +221,7 @@ class LahoreTrafficModel:
                 graph.add_edge(
                     source,
                     target,
-                    capacity=5600,
+                    capacity=5600,  # bypass lane count guess
                     current_load=0.34,
                     length_km=round(length_km, 2),
                     name="Proposed flyover bypass",

@@ -5,9 +5,11 @@ import SimulationResults from '@/components/sidebar/SimulationResults';
 import AIRecommendationPanel from '@/components/sidebar/AIRecommendation';
 import ScenarioLibrary from '@/components/sidebar/ScenarioLibrary';
 import HistoryPanel from '@/components/sidebar/HistoryPanel';
+import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { getAIAnalysis } from '@/lib/ai';
 import { updateLatestSimulationRunAi } from '@/lib/supabase';
 import type { WeatherTileLayer } from '@/lib/weather';
+
 import type {
   Alternative,
   AppState,
@@ -15,41 +17,24 @@ import type {
   MapLayer,
   Scenario,
 } from '@/types';
-import { LayoutGroup, motion } from 'framer-motion';
-import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 
-const MAP_LAYER_TOGGLES: Array<{ key: MapLayer; label: string }> = [
-  { key: 'zones', label: 'Zones' },
-  { key: 'hospitals', label: '🏥 Hospital Buildings' },
-  { key: 'schools', label: '🏫 School Buildings' },
-  { key: 'buildings', label: '🏢 All Buildings' },
-  { key: 'traffic', label: 'Traffic Arcs' },
-  { key: 'heatmap', label: 'Heatmap' },
-];
-
-const OVERLAY_LAYER_TOGGLES = [
-  { key: 'terrain' as const, label: 'Terrain' },
-  { key: 'labels' as const, label: 'Labels' },
+const MAP_LAYER_TOGGLES: Array<{
+  key: MapLayer;
+  icon: string;
+  label: string;
+  requiresSimulation?: boolean;
+}> = [
+  { key: 'buildings', icon: '🏢', label: 'Buildings' },
+  { key: 'hospitals', icon: '🏥', label: 'Hospitals' },
+  { key: 'schools', icon: '🏫', label: 'Schools' },
+  { key: 'heatmap', icon: '🌡', label: 'Heatmap', requiresSimulation: true },
 ];
 
 const WEATHER_LAYER_TOGGLES: Array<{
   key: Exclude<WeatherTileLayer, 'none'>;
+  icon: string;
   label: string;
-}> = [
-  { key: 'precipitation', label: '🌧 Precipitation' },
-  { key: 'wind', label: '💨 Wind' },
-  { key: 'temp', label: '🌡 Temperature' },
-];
-
-const TOMTOM_LAYER_TOGGLES = [
-  { key: 'trafficTiles' as const, label: '🚦 Road Traffic Lines' },
-  { key: 'incidents' as const, label: '⚠️ Incidents' },
-];
-
-const NASA_LAYER_TOGGLES: Array<{ key: MapLayer; label: string; badge: string }> = [
-  { key: 'fires', label: '🔥 Thermal Hotspots', badge: 'VIIRS' },
-  { key: 'surface-temp', label: '🌡 Surface Temp', badge: 'MODIS' },
-];
+}> = [];
 
 export interface SidebarProps {
   appState: AppState;
@@ -63,48 +48,79 @@ export interface SidebarProps {
   demoLocked?: boolean;
   activeTileLayer: WeatherTileLayer;
   onTileLayerChange: (layer: WeatherTileLayer) => void;
-  showTerrain: boolean;
-  onTerrainChange: (enabled: boolean) => void;
-  showLabels: boolean;
-  onLabelsChange: (enabled: boolean) => void;
-  showTrafficTiles: boolean;
-  onTrafficTilesChange: (enabled: boolean) => void;
-  showIncidents: boolean;
-  onIncidentsChange: (enabled: boolean) => void;
   weatherWarning?: string | null;
   setWeatherWarning: (warning: string | null) => void;
   onCompare: () => void;
 }
 
-function LayerPill({
-  active,
+function LayerCheckbox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-flex shrink-0 items-center justify-center rounded-sm border"
+      style={{
+        width: '8px',
+        height: '8px',
+        borderRadius: 'var(--radius)',
+        borderColor: checked ? 'var(--stamp-red)' : 'var(--hairline)',
+        backgroundColor: checked ? 'var(--stamp-red)' : 'transparent',
+      }}
+    >
+      {checked ? (
+        <svg aria-hidden fill="none" height="6" viewBox="0 0 6 6" width="6">
+          <path
+            d="M1 3.2 2.4 4.6 5 1.8"
+            stroke="#fff"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1"
+          />
+        </svg>
+      ) : null}
+    </span>
+  );
+}
+
+function LayerCheckRow({
+  checked,
+  icon,
   label,
-  onClick,
-  badge,
+  disabled,
+  onToggle,
 }: {
-  active: boolean;
+  checked: boolean;
+  icon: string;
   label: string;
-  onClick: () => void;
-  badge?: string;
+  disabled?: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <motion.button
-      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-        active
-          ? 'border-cyan bg-cyan/10 text-cyan'
-          : 'border-white/10 bg-white/[0.03] text-secondary hover:border-white/20 hover:text-slate-100'
+    <button
+      className={`flex w-full items-center gap-2 bg-transparent p-0 text-left ${
+        disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
       }`}
-      layout
+      disabled={disabled}
       type="button"
-      onClick={onClick}
+      onClick={onToggle}
     >
-      <span>{label}</span>
-      {badge ? (
-        <span className="rounded bg-navy/50 px-1 py-0.5 text-[9px] font-bold tracking-wider text-slate-300 border border-white/5">
-          {badge}
-        </span>
-      ) : null}
-    </motion.button>
+      <LayerCheckbox checked={checked} />
+      <span
+        aria-hidden
+        className="leading-none"
+        style={{ fontSize: '16px', color: 'var(--paper-dim)' }}
+      >
+        {icon}
+      </span>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '12px',
+          color: checked ? 'var(--paper)' : 'var(--paper-dim)',
+        }}
+      >
+        {label}
+      </span>
+    </button>
   );
 }
 
@@ -117,14 +133,6 @@ export default function Sidebar({
   onScenarioSelect,
   activeTileLayer,
   onTileLayerChange,
-  showTerrain,
-  onTerrainChange,
-  showLabels,
-  onLabelsChange,
-  showTrafficTiles,
-  onTrafficTilesChange,
-  showIncidents,
-  onIncidentsChange,
   weatherWarning,
   setWeatherWarning,
   onCompare,
@@ -142,25 +150,20 @@ export default function Sidebar({
       setHasNewHistory(true);
     }
   }, [appState.simulation_status, appState.simulation_result, activeTab]);
-  const hospitalCount = buildings.filter(
-    (building) => building.category === 'hospital',
-  ).length;
-  const schoolCount = buildings.filter(
-    (building) => building.category === 'school',
-  ).length;
-  const buildingCount = buildings.length;
+
+  const hospitalCount = buildings.filter((b) => b.category === 'hospital').length;
+  const schoolCount = buildings.filter((b) => b.category === 'school').length;
+  // console.log('layer counts', hospitalCount, schoolCount);
+  const buildingCount = buildings.length; // might be wrong if overpass times out
+  const hasSimulation = Boolean(appState.simulation_result);
 
   const toggleMapLayer = (layer: MapLayer) => {
     setAppState((current) => {
       const isActive = current.active_layers.includes(layer);
-      const nextActive = !isActive;
-      if (layer === 'traffic') {
-        onTrafficTilesChange(nextActive);
-      }
       return {
         ...current,
         active_layers: isActive
-          ? current.active_layers.filter((item) => item !== layer)
+          ? current.active_layers.filter((l) => l !== layer)
           : [...current.active_layers, layer],
       };
     });
@@ -196,7 +199,8 @@ export default function Sidebar({
         console.error('[Sidebar] Failed to persist AI recommendation:', error);
       });
     } catch (error) {
-      console.error('[Sidebar] AI analysis failed:', error);
+      // api flaky during demo, just log it
+      console.error('[Sidebar] AI failed:', error);
     } finally {
       setIsLoadingAI(false);
     }
@@ -212,6 +216,19 @@ export default function Sidebar({
     setActiveTab('studio');
   };
 
+  const handleRenewSimulation = () => {
+    setAppState((current) => ({
+      ...current,
+      drawn_location: null,
+      simulation_status: 'idle',
+      simulation_result: null,
+      ai_recommendation: null,
+      active_scenario: null,
+      active_layers: current.active_layers.filter((layer) => layer !== 'heatmap'),
+    }));
+    setActiveTab('studio');
+  };
+
   return (
     <aside
       className={`glass fixed bottom-0 left-0 top-12 z-40 flex w-[380px] flex-col overflow-y-auto border-r border-white/10 p-5 ${
@@ -219,40 +236,56 @@ export default function Sidebar({
       }`}
       style={{ width: 380 }}
     >
-      <div className="mb-6 border-b border-white/10 pb-4">
-        <p className="text-xs uppercase tracking-[0.24em] text-cyan">
-          Policy Studio
-        </p>
-        <h1 className="mt-2 text-xl font-semibold text-slate-100">
-          Design Your Policy
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-secondary">
-          Configure infrastructure decisions on Lahore&apos;s digital twin
-          before committing billions in real-world spending.
-        </p>
-      </div>
-
-      <div className="mb-4 grid grid-cols-5 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
-        {(['studio', 'results', 'ai', 'scenarios', 'history'] as SidebarTab[]).map((tab) => (
-          <button
-            key={tab}
-            className={`relative rounded-lg px-2 py-2 text-[11px] font-semibold capitalize transition ${
-              activeTab === tab
-                ? 'bg-cyan text-navy'
-                : 'text-secondary hover:bg-white/[0.04] hover:text-slate-100'
-            }`}
-            type="button"
-            onClick={() => {
-              setActiveTab(tab);
-              if (tab === 'history') setHasNewHistory(false);
-            }}
-          >
-            {tab}
-            {tab === 'history' && hasNewHistory ? (
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-cyan shadow-[0_0_8px_rgba(0,212,255,0.8)]" />
-            ) : null}
-          </button>
-        ))}
+      <div className="mb-4 border-b border-hairline">
+        <div className="flex gap-4">
+          {(
+            [
+              { key: 'studio', label: 'Studio' },
+              { key: 'results', label: 'Results' },
+              { key: 'ai', label: 'AI' },
+              { key: 'scenarios', label: 'Scenarios' },
+              { key: 'history', label: 'History' },
+            ] as const
+          ).map(({ key, label }) => {
+            const isActive = activeTab === key;
+            return (
+              <button
+                key={key}
+                className="relative bg-transparent pb-2 uppercase"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  letterSpacing: '0.5px',
+                  color: isActive ? 'var(--stamp-red)' : 'var(--file-olive)',
+                }}
+                type="button"
+                onClick={() => {
+                  setActiveTab(key);
+                  if (key === 'history') setHasNewHistory(false);
+                }}
+              >
+                {label}
+                {key === 'history' && hasNewHistory ? (
+                  <span
+                    aria-hidden
+                    className="ml-1 inline-block h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: 'var(--stamp-red)' }}
+                  />
+                ) : null}
+                {isActive ? (
+                  <span
+                    aria-hidden
+                    className="absolute bottom-0 left-0 right-0"
+                    style={{
+                      height: '2px',
+                      backgroundColor: 'var(--stamp-red)',
+                    }}
+                  />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {activeTab === 'studio' ? (
@@ -268,20 +301,43 @@ export default function Sidebar({
             />
           </div>
 
-          <LayerControls
-            appState={appState}
-            activeTileLayer={activeTileLayer}
-            showTerrain={showTerrain}
-            showLabels={showLabels}
-            showTrafficTiles={showTrafficTiles}
-            showIncidents={showIncidents}
-            toggleMapLayer={toggleMapLayer}
-            toggleWeatherLayer={toggleWeatherLayer}
-            onTerrainChange={onTerrainChange}
-            onLabelsChange={onLabelsChange}
-            onTrafficTilesChange={onTrafficTilesChange}
-            onIncidentsChange={onIncidentsChange}
-          />
+          <div>
+            <p
+              className="pb-2 uppercase"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                color: 'var(--file-olive)',
+              }}
+            >
+              Layers
+            </p>
+            <div className="mb-3 border-b border-hairline" />
+            <div className="flex flex-col gap-1.5">
+              {MAP_LAYER_TOGGLES.map((layer) => (
+                <LayerCheckRow
+                  key={layer.key}
+                  checked={appState.active_layers.includes(layer.key)}
+                  disabled={layer.requiresSimulation && !hasSimulation}
+                  icon={layer.icon}
+                  label={layer.label}
+                  onToggle={() => {
+                    if (layer.requiresSimulation && !hasSimulation) return;
+                    toggleMapLayer(layer.key);
+                  }}
+                />
+              ))}
+              {WEATHER_LAYER_TOGGLES.map((layer) => (
+                <LayerCheckRow
+                  key={layer.key}
+                  checked={activeTileLayer === layer.key}
+                  icon={layer.icon}
+                  label={layer.label}
+                  onToggle={() => toggleWeatherLayer(layer.key)}
+                />
+              ))}
+            </div>
+          </div>
 
           <InfrastructureStats
             hospitalCount={hospitalCount}
@@ -300,6 +356,7 @@ export default function Sidebar({
           onGetAIAnalysis={handleGetAIAnalysis}
           isAnalyzing={isLoadingAI}
           onCompare={onCompare}
+          onRenewSimulation={handleRenewSimulation}
         />
       ) : null}
 
@@ -338,101 +395,6 @@ export default function Sidebar({
   );
 }
 
-function LayerControls({
-  appState,
-  activeTileLayer,
-  showTerrain,
-  showLabels,
-  showTrafficTiles,
-  showIncidents,
-  toggleMapLayer,
-  toggleWeatherLayer,
-  onTerrainChange,
-  onLabelsChange,
-  onTrafficTilesChange,
-  onIncidentsChange,
-}: {
-  appState: AppState;
-  activeTileLayer: WeatherTileLayer;
-  showTerrain: boolean;
-  showLabels: boolean;
-  showTrafficTiles: boolean;
-  showIncidents: boolean;
-  toggleMapLayer: (layer: MapLayer) => void;
-  toggleWeatherLayer: (layer: Exclude<WeatherTileLayer, 'none'>) => void;
-  onTerrainChange: (enabled: boolean) => void;
-  onLabelsChange: (enabled: boolean) => void;
-  onTrafficTilesChange: (enabled: boolean) => void;
-  onIncidentsChange: (enabled: boolean) => void;
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <p className="mb-3 text-xs uppercase tracking-wide text-secondary">
-        Layers
-      </p>
-      <LayoutGroup>
-        <div className="flex flex-wrap gap-2">
-          {MAP_LAYER_TOGGLES.map((layer) => (
-            <LayerPill
-              key={layer.key}
-              active={appState.active_layers.includes(layer.key)}
-              label={layer.label}
-              onClick={() => toggleMapLayer(layer.key)}
-            />
-          ))}
-          {OVERLAY_LAYER_TOGGLES.map((layer) => (
-            <LayerPill
-              key={layer.key}
-              active={layer.key === 'terrain' ? showTerrain : showLabels}
-              label={layer.label}
-              onClick={() => {
-                if (layer.key === 'terrain') {
-                  onTerrainChange(!showTerrain);
-                  return;
-                }
-                onLabelsChange(!showLabels);
-              }}
-            />
-          ))}
-          {TOMTOM_LAYER_TOGGLES.map((layer) => (
-            <LayerPill
-              key={layer.key}
-              active={
-                layer.key === 'trafficTiles' ? showTrafficTiles : showIncidents
-              }
-              label={layer.label}
-              onClick={() => {
-                if (layer.key === 'trafficTiles') {
-                  onTrafficTilesChange(!showTrafficTiles);
-                  return;
-                }
-                onIncidentsChange(!showIncidents);
-              }}
-            />
-          ))}
-          {WEATHER_LAYER_TOGGLES.map((layer) => (
-            <LayerPill
-              key={layer.key}
-              active={activeTileLayer === layer.key}
-              label={layer.label}
-              onClick={() => toggleWeatherLayer(layer.key)}
-            />
-          ))}
-          {NASA_LAYER_TOGGLES.map((layer) => (
-            <LayerPill
-              key={layer.key}
-              active={appState.active_layers.includes(layer.key)}
-              label={layer.label}
-              badge={layer.badge}
-              onClick={() => toggleMapLayer(layer.key)}
-            />
-          ))}
-        </div>
-      </LayoutGroup>
-    </div>
-  );
-}
-
 function InfrastructureStats({
   hospitalCount,
   schoolCount,
@@ -442,22 +404,34 @@ function InfrastructureStats({
   schoolCount: number;
   buildingCount: number;
 }) {
+  const stats = [
+    { label: 'Hospitals', count: hospitalCount },
+    { label: 'Schools', count: schoolCount },
+    { label: 'Buildings', count: buildingCount },
+  ];
+
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {[
-        ['Hospitals', hospitalCount],
-        ['Schools', schoolCount],
-        ['Buildings', buildingCount],
-      ].map(([label, count]) => (
+    <div className="grid grid-cols-3">
+      {stats.map((stat, index) => (
         <div
-          key={label}
-          className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+          key={stat.label}
+          className={index > 0 ? 'border-l border-hairline pl-3' : 'pr-3'}
         >
-          <p className="text-xs uppercase tracking-wide text-secondary">
-            {label}
+          <p
+            className="uppercase"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              color: 'var(--file-olive)',
+            }}
+          >
+            {stat.label}
           </p>
-          <p className="mt-1 text-lg font-semibold text-slate-100">
-            {count}
+          <p
+            className="mt-1 text-[22px] tabular-nums text-paper"
+            style={{ fontFamily: 'var(--font-serif)' }}
+          >
+            {stat.count}
           </p>
         </div>
       ))}

@@ -43,11 +43,11 @@ const VERDICT_STYLES: Record<
   },
   conditional: {
     label: 'Conditional',
-    className: 'bg-warning/15 text-warning border-warning/40',
+    className: 'bg-accent-warning/15 text-accent-warning border-accent-warning/40',
   },
   not_recommended: {
     label: 'Not Recommended',
-    className: 'bg-danger/15 text-danger border-danger/40',
+    className: 'bg-alert-danger/15 text-alert-danger border-alert-danger/40',
   },
 };
 
@@ -102,13 +102,13 @@ function ScenarioCard({
 
   if (cardState.status === 'error') {
     return (
-      <div className="rounded-xl border border-danger/30 bg-danger/5 p-4">
+      <div className="rounded-xl border border-alert-danger/30 bg-alert-danger/5 p-4">
         <p className="text-sm font-medium text-slate-100">{config.name}</p>
-        <p className="mt-1 text-xs text-danger">
+        <p className="mt-1 text-xs text-alert-danger">
           {cardState.error ?? 'Simulation failed'}
         </p>
         <button
-          className="mt-3 rounded-lg border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/10"
+          className="mt-3 rounded-lg border border-alert-danger/40 px-3 py-1.5 text-xs font-medium text-alert-danger hover:bg-alert-danger/10"
           type="button"
           onClick={onRetry}
         >
@@ -122,15 +122,15 @@ function ScenarioCard({
     <motion.div
       className={`rounded-xl border p-4 transition ${
         isActive
-          ? 'border-cyan/60 bg-cyan/10'
-          : 'border-white/10 bg-white/[0.03] hover:border-cyan/30'
+          ? 'border-accent-warning/60 bg-accent-warning/10'
+          : 'border-white/10 bg-white/[0.03] hover:border-accent-warning/30'
       }`}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan/10 text-cyan">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-warning/10 text-accent-warning">
           <Icon className="h-4 w-4" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
@@ -138,7 +138,7 @@ function ScenarioCard({
           <p className="mt-1 text-xs leading-relaxed text-secondary">
             {config.description}
           </p>
-          <p className="mt-2 text-xs font-medium text-cyan">
+          <p className="mt-2 text-xs font-medium text-accent-warning">
             {formatBudget(config.budget_pkr)}
           </p>
         </div>
@@ -153,7 +153,7 @@ function ScenarioCard({
       ) : null}
 
       <button
-        className="mt-3 w-full rounded-lg bg-gradient-to-r from-cyan to-cyan-dark px-3 py-2 text-xs font-semibold text-navy shadow-lg shadow-cyan/15"
+        className="mt-3 w-full rounded-lg bg-gradient-to-r from-cyan to-cyan-dark px-3 py-2 text-xs font-semibold text-bg-primary shadow-lg shadow-accent-warning/15"
         type="button"
         onClick={onLoad}
       >
@@ -187,8 +187,9 @@ export default function ScenarioLibrary({
         ...current,
         [config.id]: { status: 'loaded', scenario },
       }));
+      console.log('scenario cached:', config.id);
     } catch (error) {
-      console.error(`[ScenarioLibrary] Failed to load ${config.id}:`, error);
+      console.error(`scenario load failed ${config.id}:`, error);
       setCardStates((current) => ({
         ...current,
         [config.id]: {
@@ -205,6 +206,7 @@ export default function ScenarioLibrary({
       (a, b) => a.sort_order - b.sort_order,
     );
 
+    // refactor later: parallel fetch with concurrency limit
     configs.forEach((config) => {
       void fetchScenario(config);
     });

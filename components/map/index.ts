@@ -1,6 +1,4 @@
-// Map components use WebGL and must be loaded client-side only.
-// In Next.js pages, consume with:
-//   const DeckMap = dynamic(() => import('@/components/map').then((m) => m.DeckMap), { ssr: false });
+// webgl maps — client only via next/dynamic
 export { DeckMap } from './DeckMap';
 export { CesiumMap } from './CesiumMap';
 export { ComparisonMap } from './ComparisonMap';

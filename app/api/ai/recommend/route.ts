@@ -86,6 +86,7 @@ const FALLBACK_RECOMMENDATION: AIRecommendation = {
 };
 
 function findMostImprovedZone(simulation: SimulationResponse): string {
+  // this is ugly but works, will clean up after submission
   const zone = simulation.affected_zones.reduce<(typeof simulation.affected_zones)[0] | null>(
     (best, current) => {
       const delta = current.before.flood_risk - current.after.flood_risk;
@@ -122,6 +123,7 @@ function countImprovedZones(simulation: SimulationResponse): number {
 }
 
 function countWorsenedZones(simulation: SimulationResponse): number {
+  // mirror of countImprovedZones — could DRY this later
   return simulation.affected_zones.filter(
     (zone) => zone.after.flood_risk > zone.before.flood_risk,
   ).length;
@@ -151,7 +153,8 @@ function buildUserMessage(body: RecommendRequestBody): string {
     ...(body.question ? { follow_up_question: body.question } : {}),
   };
 
-  return JSON.stringify(payload);
+  const payload_json = JSON.stringify(payload);
+  return payload_json;
 }
 
 export async function POST(request: Request) {
@@ -164,6 +167,7 @@ export async function POST(request: Request) {
     }
 
     const userMessage = buildUserMessage(body);
+    // console.log('[AI] prompt size:', userMessage.length); // was debugging token limits
     const responseText = await callOpenRouter(
       SYSTEM_PROMPT,
       userMessage,
