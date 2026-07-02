@@ -33,9 +33,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 
-# cesium assets copied at build (see scripts/copy-cesium.js)
-/public/cesium/
-
 # python simulation backend
 simulation/.venv/
 simulation/__pycache__/

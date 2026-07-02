@@ -2,7 +2,7 @@
 
 Digital twin thing for Lahore — simulate flyovers, hospitals, drainage etc on a live map before the govt burns billions on the wrong project.
 
-Stack: Next.js 14, Deck.gl, MapTiler, TomTom traffic, OpenWeather, OpenRouter AI, Cesium 3D globe, Supabase if you bother setting it up.
+Stack: Next.js 14, Deck.gl, MapTiler, OpenWeather, OpenRouter AI, Supabase if you bother setting it up.
 
 ngl this took way longer than expected.
 
@@ -37,13 +37,11 @@ copy `.env.example` → `.env.local`:
 |----------|----------|----------|
 | `NEXT_PUBLIC_MAPTILER_KEY` | yeah* | base map |
 | `NEXT_PUBLIC_STADIA_API_KEY` | yeah* | fallback if maptiler dies |
-| `NEXT_PUBLIC_TOMTOM_API_KEY` | yes | traffic (simulated in PK anyway) |
 | `OPENWEATHER_API_KEY` | yes | weather + AQI |
 | `OPENROUTER_API_KEY` | yes | AI stuff |
 | `OPENROUTER_MODEL` | nah | default `google/gemma-2-27b-it` |
 | `NEXT_PUBLIC_SUPABASE_URL` | optional | history panel |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | optional | same |
-| `NEXT_PUBLIC_CESIUM_TOKEN` | optional | 3D globe |
 
 \* need at least one of maptiler or stadia
 
@@ -54,7 +52,7 @@ server keys (`OPENROUTER`, `OPENWEATHER`) stay server-side, don't put them in `N
 1. push to github
 2. import on vercel.com/new
 3. dump env vars from `.env.example` into project settings
-4. deploy — it runs postinstall (cesium copy) + build automatically
+4. deploy — it runs install + build automatically
 
 ## scripts
 

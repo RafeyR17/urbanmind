@@ -83,7 +83,7 @@ export function getZoneElevation(
   return Math.min(risk * ELEVATION_SCALE, MAX_ELEVATION);
 }
 
-// rgba tuple for cesium materials
+// rgba tuple for map material styling
 export function getZoneRgba(
   zone: DistrictZone,
   simulationResult?: SimulationResponse | null,

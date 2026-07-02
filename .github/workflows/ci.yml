@@ -29,9 +29,7 @@ jobs:
         env:
           NEXT_PUBLIC_MAPTILER_KEY: ${{ secrets.NEXT_PUBLIC_MAPTILER_KEY }}
           NEXT_PUBLIC_STADIA_API_KEY: ${{ secrets.NEXT_PUBLIC_STADIA_API_KEY }}
-          NEXT_PUBLIC_TOMTOM_API_KEY: placeholder
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
-          NEXT_PUBLIC_CESIUM_TOKEN: placeholder
           OPENROUTER_API_KEY: placeholder
           OPENWEATHER_API_KEY: placeholder

@@ -1,6 +1,5 @@
 import { TripsLayer } from '@deck.gl/geo-layers';
 import type { RoadFeatureCollection } from '@/lib/overpass';
-import type { TrafficFlowSegment } from '@/lib/tomtom';
 import { calculateOverallImpactScore } from '@/lib/zoneImpact';
 import type {
   GeoJSONPolygonGeometry,
@@ -10,27 +9,13 @@ import type {
 export interface RoadTrip {
   path: [number, number][];
   timestamps: number[];
-  congestionLevel: number;
+  trafficLevel: number;
   zoneImpact: 'improved' | 'worsened' | 'neutral';
 }
 
 function getLineCenter(path: [number, number][]): [number, number] {
   const mid = Math.floor(path.length / 2);
   return path[mid] ?? path[0];
-}
-
-function haversineKm(a: [number, number], b: [number, number]): number {
-  const [lng1, lat1] = a;
-  const [lng2, lat2] = b;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const sinLat = Math.sin(dLat / 2);
-  const sinLng = Math.sin(dLng / 2);
-  const h =
-    sinLat * sinLat +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sinLng * sinLng;
-  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
 function getFirstRing(polygon: GeoJSONPolygonGeometry): [number, number][] {
@@ -78,28 +63,6 @@ function getZoneImpact(
   return 'neutral';
 }
 
-function matchCongestion(
-  center: [number, number],
-  trafficData: TrafficFlowSegment[],
-): number {
-  if (trafficData.length === 0) return 0.5;
-
-  let bestDistance = Infinity;
-  let bestLevel = 0.5;
-
-  for (const segment of trafficData) {
-    const idx = Math.floor(segment.coordinates.length / 2);
-    const segCenter = segment.coordinates[idx] ?? segment.coordinates[0];
-    const distance = haversineKm(center, segCenter);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestLevel = segment.congestionLevel;
-    }
-  }
-
-  return bestDistance <= 0.05 ? bestLevel : 0.5; // 50m match radius
-}
-
 function buildTimestamps(pointCount: number): number[] {
   if (pointCount <= 1) return [0, 1000];
   return Array.from({ length: pointCount }, (_, index) =>
@@ -109,7 +72,6 @@ function buildTimestamps(pointCount: number): number[] {
 
 export function buildTrafficTrips(
   roads: RoadFeatureCollection,
-  trafficData: TrafficFlowSegment[],
   simulationResult?: SimulationResponse | null,
 ): RoadTrip[] {
   const trips: RoadTrip[] = [];
@@ -124,7 +86,7 @@ export function buildTrafficTrips(
     trips.push({
       path,
       timestamps: buildTimestamps(path.length),
-      congestionLevel: matchCongestion(center, trafficData),
+      trafficLevel: 0.5,
       zoneImpact: getZoneImpact(center, simulationResult),
     });
   }
@@ -149,12 +111,12 @@ export function createTrafficParticleLayer(
         if (d.zoneImpact === 'worsened') return [239, 68, 68, 220];
       }
 
-      const c = d.congestionLevel;
+      const c = d.trafficLevel;
       if (c < 0.3) return [200, 230, 255, 200];
       if (c < 0.6) return [245, 158, 11, 200];
       return [239, 68, 68, 200];
     },
-    getWidth: (d) => 2 + (1 - d.congestionLevel) * 2,
+    getWidth: (d) => 2 + (1 - d.trafficLevel) * 2,
     currentTime,
     trailLength: 120, // particle tail length in time units
     rounded: true,

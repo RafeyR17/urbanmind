@@ -40,13 +40,8 @@ import {
   hasMapApiKey,
   type MapProvider,
 } from '@/lib/mapConfig';
-import {
-  getTomTomIncidentTileUrl,
-  getTomTomTrafficFlowTileTemplate,
-} from '@/lib/tomtom';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-const TOMTOM_API_KEY = process.env.NEXT_PUBLIC_TOMTOM_API_KEY ?? '';
 const PRIMARY_MAP_STYLE = getPrimaryMapStyleUrl();
 const STADIA_FALLBACK_STYLE = getStadiaFallbackStyleUrl();
 
@@ -170,8 +165,6 @@ export interface DeckMapProps {
   isDrawingMode: boolean;
   activeTileLayer?: WeatherTileLayer;
   showTerrain?: boolean;
-  showTrafficTiles?: boolean;
-  showIncidentTiles?: boolean;
   showFires?: boolean;
   showSurfaceTemp?: boolean;
   externalViewState?: UrbanIQViewState;
@@ -192,8 +185,6 @@ function DeckMap(
     isDrawingMode,
     activeTileLayer = 'none',
     showTerrain = false,
-    showTrafficTiles = true,
-    showIncidentTiles = false,
     showFires = false,
     showSurfaceTemp = false,
     externalViewState,
@@ -375,44 +366,6 @@ function DeckMap(
             />
           </Source>
         ) : null}
-        {showTrafficTiles && TOMTOM_API_KEY ? (
-          <Source
-            id="tomtom-traffic-flow"
-            type="raster"
-            tiles={[getTomTomTrafficFlowTileTemplate()]}
-            tileSize={256}
-            attribution="© TomTom Traffic"
-          >
-            <MapLibreLayer
-              id="traffic-flow-layer"
-              type="raster"
-              layout={{
-                visibility: showTrafficTiles ? 'visible' : 'none',
-              }}
-              paint={{
-                'raster-opacity': 0.95,
-                'raster-fade-duration': 0,
-              }}
-            />
-          </Source>
-        ) : null}
-        {showIncidentTiles && TOMTOM_API_KEY ? (
-          <Source
-            id="tomtom-traffic-incidents"
-            type="raster"
-            tiles={[getTomTomIncidentTileUrl()]}
-            tileSize={256}
-          >
-            <MapLibreLayer
-              id="traffic-incident-layer"
-              type="raster"
-              layout={{
-                visibility: showIncidentTiles ? 'visible' : 'none',
-              }}
-              paint={{ 'raster-opacity': 0.9 }}
-            />
-          </Source>
-        ) : null}
         {showFires ? (
           <Source
             id="nasa-thermal-hotspots"
@@ -448,27 +401,6 @@ function DeckMap(
           </Source>
         ) : null}
       </Map>
-      {showTrafficTiles && TOMTOM_API_KEY ? (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 24,
-            left: 8,
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.55)',
-            pointerEvents: 'none',
-            zIndex: 10,
-            lineHeight: 1.5,
-          }}
-        >
-          <div className="font-medium text-slate-200">Live traffic particles</div>
-          <div className="flex items-center gap-2">
-            <span style={{ color: '#c8e6ff' }}>●</span> Clear
-            <span style={{ color: 'var(--accent-warning)' }}>●</span> Moderate
-            <span style={{ color: 'var(--alert-danger)' }}>●</span> Congested
-          </div>
-        </div>
-      ) : null}
       <div
         style={{
           position: 'absolute',

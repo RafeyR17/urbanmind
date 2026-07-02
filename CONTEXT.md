@@ -15,7 +15,6 @@ Fallback: https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key={
 ## Stack
 - Frontend:  Next.js 14 (App Router), TypeScript, Tailwind CSS
 - Map (2D): Deck.gl 9 + react-map-gl 8 + MapLibre GL + MapTiler (Stadia fallback)
-- Map (3D): CesiumJS + Resium — toggleable 3D globe with OSM buildings
 - Animation: Framer Motion
 - Icons:     Lucide React
 - Backend:   Python FastAPI in `/simulation` (run via `simulation/run.sh`)
@@ -23,13 +22,9 @@ Fallback: https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key={
 - AI:        OpenRouter API — model: google/gemma-2-27b-it (via OPENROUTER_MODEL)
 - Map Data:  OpenStreetMap Overpass API (proxied via /api/overpass)
 - Weather:   OpenWeatherMap API (current weather + air pollution AQI, precipitation/wind/temp tiles)
-- Traffic:   TomTom Traffic Flow + Incidents APIs + Orbis traffic tiles
 
 ## Map Modes
-- **deck** (default): Deck.gl + MapTiler dark map — traffic, weather, TomTom overlays
-- **cesium**: CesiumJS 3D globe — world terrain, OSM 3D buildings, extruded zone polygons
-- Toggle via TopBar: `🗺 2D Map` / `🌍 3D Globe` (both mounted; inactive hidden with `display: none`)
-- Cesium camera flies to most-affected zone (3000m, -45° pitch) when simulation exists; else Lahore center at 8000m
+- **deck** (default): Deck.gl + MapTiler dark map — traffic and weather overlays
 
 ## Map Provider — MapTiler (2D deck mode, Stadia fallback)
 - **Base style:** MapTiler Dataviz Dark (primary); Stadia Alidade Smooth Dark if MapTiler fails
@@ -37,17 +32,15 @@ Fallback: https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key={
 - **Labels:** Vector labels from Stadia style (toggle via `setMapLabelsVisible`, default on)
 - **Weather overlays:** OpenWeatherMap raster tiles (Stadia has no weather data)
 
-## Traffic — TomTom
-- **Flow API:** Live congestion at 8 Lahore intersections (parallel fetch)
+## Traffic
 - **Particle system:** `TrafficParticleLayer` using Deck.gl `TripsLayer` (`@deck.gl/geo-layers`)
 - **Road geometry:** Lahore roads fetched from Overpass API via `fetchRoads()` — cached per session
-- **Particles:** Move along actual OSM road LineStrings; color by TomTom congestion (white-blue → amber → red)
+- **Particles:** Move along actual OSM road LineStrings with baseline congestion coloring (white-blue → amber → red)
 - **Simulation:** After policy run, particles in improved zones turn green; worsened zones turn red
 - **Animation:** `requestAnimationFrame` loop in `page.tsx` — trail length 120, loop 1800ms
-- **Refresh:** TomTom flow every 2 minutes (`TRAFFIC_REFRESH_MS = 120000`)
 
 ## Map Layers (Deck mode)
-- **Removed:** ArcLayer, ZoneLayer, IncidentLayer, TomTom raster overlays from default view
+- **Removed:** ArcLayer, ZoneLayer, IncidentLayer, raster traffic overlays from default view
 - **Active:** BuildingLayer (dark navy extrusions, zoom ≥ 13), HospitalLayer (red pulsing dots), SchoolLayer (blue dots), TrafficParticleLayer, HeatmapLayer (post-simulation), ProposedPolicyLayer (policy marker)
 - **Base map:** Stripped MapTiler style — pitch-black water, dark navy land, barely-visible road lines
 
@@ -55,7 +48,6 @@ Fallback: https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key={
 Working:
 - Full-screen minimal dark map of Lahore with moving traffic particles on real roads
 - Split-screen Before/After Comparison mode with synchronized view
-- Live TomTom congestion drives particle colors
 - 3D extruded OSM buildings (subtle dark navy) + hospital/school dot layers
 - OpenWeather live weather in top bar (temp, AQI, PKT clock)
 - Weather map tile overlays: precipitation, wind
@@ -88,8 +80,7 @@ Not yet built:
     AIRecommendation.tsx    — verdict, scores, risks, Ask UrbanMind
     SimulationResults.tsx   — metrics + Get AI Analysis button
     PolicyStudio.tsx
-  /map/DeckMap.tsx          — MapTiler + Stadia fallback + TomTom tiles + Deck.gl + OWM tiles
-  /map/CesiumMap.tsx        — Cesium 3D globe + terrain + OSM buildings
+  /map/DeckMap.tsx          — MapTiler + Stadia fallback + Deck.gl + OWM tiles
   /map/layers/
     BuildingLayer.ts        — subtle dark navy extruded footprints (zoom ≥ 13)
     HospitalLayer.ts        — red pulsing scatter dots
@@ -101,7 +92,6 @@ Not yet built:
 /lib
   openrouter.ts             — OpenRouter chat completions client
   ai.ts                     — client helper for /api/ai/recommend
-  tomtom.ts                 — TomTom flow fetch
   weather.ts                — OpenWeather fetch, AQI helpers, OWM tile URLs
   simulation.ts             — runSimulation() with weather context
   lahoreData.ts
@@ -119,11 +109,7 @@ Not yet built:
 ```
 
 ## Key Patterns
-- DeckMap + CesiumMap: `dynamic(..., { ssr: false })` — both stay mounted for instant toggle
-- Cesium static assets copied to `public/cesium` via `scripts/copy-cesium.js` (postinstall + prebuild)
-- Cesium Ion token: `NEXT_PUBLIC_CESIUM_TOKEN` — terrain + imagery
 - MapTiler style + terrain use `NEXT_PUBLIC_MAPTILER_KEY`; Stadia fallback uses `NEXT_PUBLIC_STADIA_API_KEY`
-- TomTom flow/incidents/tiles use `NEXT_PUBLIC_TOMTOM_API_KEY`
 - AI recommendations: client POSTs to `/api/ai/recommend` (keeps `OPENROUTER_API_KEY` server-side)
 - Weather fetch: client calls `/api/weather` (keeps OPENWEATHER_API_KEY server-side)
 - Weather tiles: OWM via `/api/weather?tile=precipitation|wind|temp`
@@ -135,8 +121,6 @@ Not yet built:
 ```
 NEXT_PUBLIC_MAPTILER_KEY=     # MapTiler — primary base style, hillshade terrain
 NEXT_PUBLIC_STADIA_API_KEY=   # Stadia Maps — fallback base style + terrain
-NEXT_PUBLIC_TOMTOM_API_KEY=     # TomTom — traffic flow, incidents, map tiles
-NEXT_PUBLIC_CESIUM_TOKEN=       # Cesium Ion — 3D globe terrain + imagery
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 OPENROUTER_API_KEY=           # OpenRouter — UrbanMind AI recommendations
@@ -197,7 +181,6 @@ active_tile_layer: 'none'
 show_terrain: false
 show_labels: true
 show_traffic_tiles: false
-show_incidents: true
 view_mode: 'deck'
 simulation_status: 'idle'
 ```

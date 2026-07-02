@@ -25,11 +25,6 @@ import {
 } from '@/components/map/layers';
 import { LAHORE_CENTER } from '@/lib/lahoreData';
 import { fetchBuildingsWithType, fetchRoads, getInitialBuildings, getInitialRoads } from '@/lib/overpass';
-import {
-  fetchTrafficFlow,
-  TRAFFIC_REFRESH_MS,
-  type TrafficFlowSegment,
-} from '@/lib/tomtom';
 import { SCENARIO_CONFIGS, loadScenario, resolveScenarioId } from '@/lib/scenarios';
 import {
   checkSimulationBackendHealth,
@@ -155,14 +150,6 @@ const ComparisonMap = dynamic(
   { ssr: false },
 );
 
-const CesiumMap = dynamic(
-  () => import('@/components/map').then((module) => module.CesiumMap),
-  {
-    ssr: false,
-    loading: MapLoading,
-  },
-);
-
 export default function HomePage() {
   const deckMapRef = useRef<DeckMapHandle | null>(null);
   const animationRef = useRef<number>();
@@ -174,8 +161,6 @@ export default function HomePage() {
   const [roads, setRoads] = useState(getInitialRoads);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [comparisonMode, setComparisonMode] = useState(false);
-  const [viewMode, setViewMode] = useState<'deck' | 'cesium'>('deck');
-  const [cesiumFlyKey, setCesiumFlyKey] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [buildingTooltip, setBuildingTooltip] =
     useState<BuildingTooltip | null>(null);
@@ -185,8 +170,6 @@ export default function HomePage() {
   const [mapZoom, setMapZoom] = useState(13);
   const [activeTileLayer, setActiveTileLayer] =
     useState<WeatherTileLayer>('none');
-  const [trafficData, setTrafficData] = useState<TrafficFlowSegment[]>([]);
-  const [lastTrafficUpdate, setLastTrafficUpdate] = useState<Date | null>(null);
   const [weatherWarning, setWeatherWarning] = useState<string | null>(null);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<SidebarTab>('studio');
@@ -337,25 +320,6 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadTrafficData = async () => {
-      const flow = await fetchTrafficFlow();
-      if (cancelled) return;
-      setTrafficData(flow);
-      setLastTrafficUpdate(new Date());
-    };
-
-    loadTrafficData();
-    const interval = window.setInterval(loadTrafficData, TRAFFIC_REFRESH_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
     const probeBackend = async () => {
       const online = await checkSimulationBackendHealth();
       if (!cancelled) setBackendOnline(online);
@@ -413,12 +377,6 @@ export default function HomePage() {
   }, [appState.active_layers]);
 
   useEffect(() => {
-    if (viewMode === 'cesium') {
-      setCesiumFlyKey((current) => current + 1);
-    }
-  }, [viewMode]);
-
-  useEffect(() => {
     if (!isDrawingMode) return;
 
     deckMapRef.current?.flyToLocation({
@@ -462,10 +420,9 @@ export default function HomePage() {
   const trafficTrips = useMemo(() => {
     return buildTrafficTrips(
       roads,
-      trafficData,
       appState.simulation_result,
     );
-  }, [roads, trafficData, appState.simulation_result]);
+  }, [roads, appState.simulation_result]);
 
   const handleBuildingHover = useCallback(
     (info: PickingInfo<BuildingFeature>) => {
@@ -646,7 +603,6 @@ export default function HomePage() {
     if (running) {
       setComparisonMode(false);
       setIsDrawingMode(false);
-      setViewMode('deck');
       setActiveTab('studio');
     }
   }, []);
@@ -670,7 +626,6 @@ export default function HomePage() {
         style={{
           position: 'absolute',
           inset: 0,
-          display: viewMode === 'deck' ? 'block' : 'none',
         }}
       >
         <DeckMap
@@ -681,27 +636,15 @@ export default function HomePage() {
           onMapClick={handleMapClick}
           isDrawingMode={isDrawingMode}
           activeTileLayer={activeTileLayer}
-          showTrafficTiles={false} // keep particle traffic only; raster layer looks like blobs
           onZoomChange={setMapZoom}
         />
       </div>
-
-      {viewMode === 'cesium' ? (
-        <div style={{ position: 'absolute', inset: 0 }}>
-          <CesiumMap
-            buildings={buildings}
-            simulationResult={appState.simulation_result}
-            cameraFlyKey={cesiumFlyKey}
-          />
-        </div>
-      ) : null}
 
       {comparisonMode && appState.simulation_result ? (
         <ComparisonMap
           appState={appState}
           buildings={buildings}
           roads={roads}
-          trafficData={trafficData}
           simulationResult={appState.simulation_result}
           currentTime={currentTime}
           mapZoom={mapZoom}
@@ -751,12 +694,7 @@ export default function HomePage() {
         backendOnline={backendOnline}
         isMockResult={isMockSimulation(appState.simulation_result)}
       />
-      <TopBar
-        trafficData={trafficData}
-        lastTrafficUpdate={lastTrafficUpdate}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-      />
+      <TopBar />
       <Sidebar
         appState={appState}
         setAppState={setAppState}

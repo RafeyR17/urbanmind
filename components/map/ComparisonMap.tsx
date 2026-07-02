@@ -15,7 +15,6 @@ import type {
   BuildingFeature,
   SimulationResponse,
 } from '@/types';
-import type { TrafficFlowSegment } from '@/lib/tomtom';
 import type { RoadFeatureCollection } from '@/lib/overpass';
 
 const INITIAL_SHARED_VIEW = {
@@ -30,7 +29,6 @@ export interface ComparisonMapProps {
   appState: AppState;
   buildings: BuildingFeature[];
   roads: RoadFeatureCollection;
-  trafficData: TrafficFlowSegment[];
   simulationResult: SimulationResponse;
   currentTime: number;
   mapZoom: number;
@@ -178,7 +176,6 @@ function buildComparisonLayers(
   appState: AppState,
   buildings: BuildingFeature[],
   roads: RoadFeatureCollection,
-  trafficData: TrafficFlowSegment[],
   simulationResult: SimulationResponse | null,
   currentTime: number,
   mapZoom: number,
@@ -200,7 +197,7 @@ function buildComparisonLayers(
   }
 
   if (active.includes('traffic')) {
-    const trips = buildTrafficTrips(roads, trafficData, simulationResult);
+    const trips = buildTrafficTrips(roads, simulationResult);
     if (trips.length > 0) {
       arr.push(
         createTrafficParticleLayer(trips, currentTime, simulationResult),
@@ -215,7 +212,6 @@ export function ComparisonMap({
   appState,
   buildings,
   roads,
-  trafficData,
   simulationResult,
   currentTime,
   mapZoom,
@@ -233,12 +229,11 @@ export function ComparisonMap({
         appState,
         buildings,
         roads,
-        trafficData,
         null,
         currentTime,
         mapZoom,
       ),
-    [appState, buildings, roads, trafficData, currentTime, mapZoom],
+    [appState, buildings, roads, currentTime, mapZoom],
   );
 
   const afterLayers = useMemo(
@@ -247,12 +242,11 @@ export function ComparisonMap({
         appState,
         buildings,
         roads,
-        trafficData,
         simulationResult,
         currentTime,
         mapZoom,
       ),
-    [appState, buildings, roads, trafficData, simulationResult, currentTime, mapZoom],
+    [appState, buildings, roads, simulationResult, currentTime, mapZoom],
   );
 
   const mapAreaTop = 88; // clears topbar + stats strip
@@ -281,7 +275,6 @@ export function ComparisonMap({
             layers={beforeLayers}
             onMapClick={() => undefined}
             isDrawingMode={false}
-            showTrafficTiles={false}
             externalViewState={sharedViewState}
             onViewStateChange={handleViewStateChange}
           />
@@ -293,7 +286,6 @@ export function ComparisonMap({
             layers={afterLayers}
             onMapClick={() => undefined}
             isDrawingMode={false}
-            showTrafficTiles={false}
             externalViewState={sharedViewState}
             onViewStateChange={handleViewStateChange}
           />

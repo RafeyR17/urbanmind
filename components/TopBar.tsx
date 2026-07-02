@@ -1,11 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import {
-  getAverageCongestion,
-  type TrafficFlowSegment,
-  type TrafficIncident,
-} from '@/lib/tomtom';
+import { useEffect, useState } from 'react';
 import {
   getAQILabel,
   getWeatherIconUrl,
@@ -14,8 +9,6 @@ import {
 
 const WEATHER_REFRESH_MS = 5 * 60 * 1000;
 
-export type ViewMode = 'deck' | 'cesium';
-
 function formatPktTime(date: Date): string {
   return new Intl.DateTimeFormat('en-GB', {
     hour: '2-digit',
@@ -23,18 +16,6 @@ function formatPktTime(date: Date): string {
     hour12: false,
     timeZone: 'Asia/Karachi',
   }).format(date);
-}
-
-function getTrafficLabel(avgCongestion: number): string {
-  if (avgCongestion < 0.3) return 'TRAFFIC: CLEAR';
-  if (avgCongestion < 0.6) return 'TRAFFIC: MODERATE';
-  if (avgCongestion < 0.8) return 'TRAFFIC: HEAVY';
-  return 'TRAFFIC: GRIDLOCK';
-}
-
-function getTrafficColor(avgCongestion: number): string {
-  if (avgCongestion < 0.6) return 'var(--file-olive)';
-  return 'var(--stamp-red)';
 }
 
 function getAqiColor(aqi: number): string {
@@ -58,41 +39,10 @@ function StatusSeparator() {
   return <span className="text-paper-dim"> · </span>;
 }
 
-export interface TopBarProps {
-  trafficData?: TrafficFlowSegment[];
-  incidents?: TrafficIncident[];
-  lastTrafficUpdate?: Date | null;
-  showIncidents?: boolean;
-  onToggleIncidents?: () => void;
-  viewMode?: ViewMode;
-  onViewModeChange?: (mode: ViewMode) => void;
-}
-
-export default function TopBar({ trafficData = [] }: TopBarProps) {
+export default function TopBar() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pktTime, setPktTime] = useState('');
-
-  const avgCongestion = useMemo(
-    () => getAverageCongestion(trafficData),
-    [trafficData],
-  );
-
-  const trafficLabel = useMemo(
-    () =>
-      trafficData.length > 0
-        ? getTrafficLabel(avgCongestion)
-        : 'TRAFFIC: N/A',
-    [trafficData.length, avgCongestion],
-  );
-
-  const trafficColor = useMemo(
-    () =>
-      trafficData.length > 0
-        ? getTrafficColor(avgCongestion)
-        : 'var(--file-olive)',
-    [trafficData.length, avgCongestion],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -194,8 +144,6 @@ export default function TopBar({ trafficData = [] }: TopBarProps) {
           <StatusDot color="var(--success-stamp)" />
           <span style={{ color: 'var(--success-stamp)' }}>LIVE</span>
         </span>
-        <StatusSeparator />
-        <span style={{ color: trafficColor }}>{trafficLabel}</span>
         <StatusSeparator />
         {isLoading ? (
           <span className="text-paper-dim">AQI --</span>

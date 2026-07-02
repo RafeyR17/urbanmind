@@ -20,5 +20,4 @@ fi
 echo "[build] Clearing .next..."  # stale chunks = mysterious 404s
 rm -rf .next
 
-node scripts/copy-cesium.js
 exec npx next build "$@"
